@@ -1,0 +1,141 @@
+.page-renderer {
+  width: 800px;
+  min-height: 1000px;
+  margin: 20px auto;
+  padding: 30px;
+  background: white;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.page-renderer.mobile {
+  width: 375px;
+  min-height: 667px;
+}
+
+.page-renderer.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 12px 16px;
+  margin: -30px -30px 24px;
+  border-bottom: 1px solid #e0e0e0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0));
+}
+
+.page-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.page-header-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.page-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brand-mark {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+}
+
+.brand-title {
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
+.page-title {
+  font-weight: 700;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.page-subtitle {
+  color: rgba(0, 0, 0, 0.64);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.validity {
+  color: rgba(0, 0, 0, 0.68);
+}
+
+.page-content {
+  min-height: 800px;
+}
+
+.empty-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 400px;
+}
+
+.offers-grid {
+  --offer-cols: 3;
+  display: grid;
+  grid-template-columns: repeat(var(--offer-cols), minmax(0, 1fr));
+  gap: 20px;
+}
+
+.offer-slot {
+  min-width: 0;
+}
+
+.offer-slot.editable {
+  cursor: grab;
+}
+
+.offer-slot.drag-over {
+  outline: 2px dashed rgba(0, 0, 0, 0.25);
+  outline-offset: 4px;
+}
+
+.offer-placeholder {
+  min-height: 220px;
+  border: 1px dashed rgba(0, 0, 0, 0.18);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.page-footer {
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px solid #e0e0e0;
+  text-align: center;
+}
+
+.page-renderer.mobile .page-header {
+  padding: 10px 12px;
+  margin: -30px -30px 18px;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.page-renderer.mobile .page-header-right {
+  align-items: flex-start;
+}

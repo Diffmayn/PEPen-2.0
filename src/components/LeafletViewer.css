@@ -1,0 +1,73 @@
+.leaflet-viewer {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+}
+
+.main-viewer {
+  flex: 1;
+  overflow: auto;
+  padding: 20px;
+  background: #e0e0e0;
+}
+
+.viewer-container {
+  transform-origin: top center;
+  transition: transform 0.2s ease;
+  min-height: 100%;
+}
+
+.viewer-container.scroll {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.viewer-container.flip {
+  display: flex;
+  justify-content: center;
+}
+
+.flipbook-wrap {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.flip-page {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  background: transparent;
+}
+
+.viewer-container.flip .page-renderer {
+  margin: 0;
+}
+
+.scroll-pages {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.scroll-page {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.page-placeholder {
+  width: 800px;
+  margin: 20px auto;
+  background: white;
+  border: 1px solid #e0e0e0;
+}
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}

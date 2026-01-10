@@ -1,0 +1,28 @@
+.file-uploader-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 40px;
+}
+
+.file-uploader {
+  padding: 60px 40px;
+  text-align: center;
+  border: 3px dashed #ccc;
+  border-radius: 12px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  max-width: 600px;
+}
+
+.file-uploader:hover {
+  border-color: #1976d2;
+  background: #f8f9fa;
+}
+
+.file-uploader.drag-active {
+  border-color: #1976d2;
+  background: #e3f2fd;
+}
