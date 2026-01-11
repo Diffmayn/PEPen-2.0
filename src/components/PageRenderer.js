@@ -40,7 +40,7 @@ function stableBlockKey(block, blockIndex) {
   return id ? id : `idx-${blockIndex}`;
 }
 
-function PageRenderer({ area, areaIndex, zoom, editMode, onOfferClick, selectedOfferId, onOfferUpdate, metadata, highlightTerm, highlightEnabled = false, mobile = false, layout, onLayoutChange }) {
+function PageRenderer({ area, areaIndex, zoom, editMode, onOfferClick, selectedOfferId, onOfferUpdate, metadata, highlightTerm, highlightEnabled = false, mobile = false, layout, onLayoutChange, commentsByOfferId, onOpenComments, offerFilter, proofingByOfferId, proofingEnabled }) {
   const [dragKey, setDragKey] = useState(null);
   const [overKey, setOverKey] = useState(null);
 
@@ -179,6 +179,9 @@ function PageRenderer({ area, areaIndex, zoom, editMode, onOfferClick, selectedO
               const span = spanForSize(size);
               const isOver = overKey && overKey === key;
 
+              const matchesFilter =
+                !block.offer || typeof offerFilter !== 'function' ? true : !!offerFilter(block.offer);
+
               return (
                 <div
                   key={key}
@@ -223,19 +226,35 @@ function PageRenderer({ area, areaIndex, zoom, editMode, onOfferClick, selectedO
                   }}
                 >
                   {block.offer ? (
+                    matchesFilter ? (
                     <OfferCard
                       offer={block.offer}
                       blockId={block.blockId}
                       editMode={editMode}
                       onClick={() => onOfferClick(block.offer)}
-                      isSelected={selectedOfferId && selectedOfferId === block.offer.id}
+                      isSelected={selectedOfferId && String(selectedOfferId) === String(block.offer.id)}
                       areaIndex={areaIndex}
                       blockIndex={blockIndex}
                       onOfferUpdate={onOfferUpdate}
                       highlightTerm={highlightEnabled ? highlightTerm : ''}
+                      proofingEnabled={!!proofingEnabled}
+                      proofing={
+                        proofingByOfferId && block.offer?.id
+                          ? proofingByOfferId[String(block.offer.id).trim()]
+                          : null
+                      }
                       layoutSize={size}
                       onSetLayoutSize={(nextSize) => handleSetSize(key, nextSize)}
+                      commentCount={
+                        block.offer?.id && commentsByOfferId && Array.isArray(commentsByOfferId[String(block.offer.id)])
+                          ? commentsByOfferId[String(block.offer.id)].length
+                          : 0
+                      }
+                      onOpenComments={onOpenComments}
                     />
+                    ) : (
+                      <PlaceholderCard label="Skjult af filter" />
+                    )
                   ) : (
                     <PlaceholderCard />
                   )}

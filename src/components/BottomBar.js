@@ -20,6 +20,7 @@ import ZoomOutIcon from '@mui/icons-material/ZoomOut';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import SearchIcon from '@mui/icons-material/Search';
+import SpellcheckIcon from '@mui/icons-material/Spellcheck';
 
 function clamp(n, min, max) {
   return Math.min(max, Math.max(min, n));
@@ -44,9 +45,14 @@ function BottomBar({
   setSearchTerm,
   searchResults,
   onSelectSearchResult,
+  proofingEnabled,
+  proofingIssueCount,
+  proofingIssues,
+  onSelectProofingIssue,
 }) {
   const [pageInput, setPageInput] = useState('');
   const [resultsAnchor, setResultsAnchor] = useState(null);
+  const [proofingAnchor, setProofingAnchor] = useState(null);
 
   const pageLabel = useMemo(() => {
     if (!hasData) return 'Side 0 af 0';
@@ -73,6 +79,16 @@ function BottomBar({
     setResultsAnchor(null);
   };
 
+  const openProofing = (e) => {
+    if (!proofingEnabled) return;
+    if (!proofingIssueCount) return;
+    setProofingAnchor(e.currentTarget);
+  };
+
+  const closeProofing = () => {
+    setProofingAnchor(null);
+  };
+
   return (
     <Paper
       elevation={8}
@@ -83,7 +99,7 @@ function BottomBar({
         bottom: 0,
         zIndex: 1300,
         px: 2,
-        py: 1,
+        py: 0.75,
         display: 'flex',
         alignItems: 'center',
         gap: 2,
@@ -128,10 +144,10 @@ function BottomBar({
           sx={{
             width: 70,
             px: 1,
-            py: 0.5,
+            py: 0.25,
             border: '1px solid rgba(0,0,0,0.2)',
             borderRadius: 1,
-            fontSize: 14,
+            fontSize: 12,
           }}
           inputProps={{ inputMode: 'numeric' }}
         />
@@ -198,10 +214,10 @@ function BottomBar({
           sx={{
             flex: 1,
             px: 1,
-            py: 0.5,
+            py: 0.25,
             border: '1px solid rgba(0,0,0,0.2)',
             borderRadius: 1,
-            fontSize: 14,
+            fontSize: 12,
           }}
         />
         <Tooltip title="Søgeresultater">
@@ -242,6 +258,62 @@ function BottomBar({
           {searchResults && searchResults.length > 50 && (
             <MenuItem disabled>
               <Typography variant="caption">Viser de første 50 resultater</Typography>
+            </MenuItem>
+          )}
+        </Menu>
+      </Box>
+
+      <Divider orientation="vertical" flexItem />
+
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 170 }}>
+        <SpellcheckIcon fontSize="small" />
+        <Tooltip title={proofingEnabled ? 'Stavefejl (klik for liste)' : 'Stavekontrol er slået fra'}>
+          <span>
+            <Typography
+              variant="caption"
+              sx={{ cursor: hasData && proofingEnabled && proofingIssueCount ? 'pointer' : 'default' }}
+              onClick={openProofing}
+            >
+              {hasData
+                ? (proofingEnabled
+                  ? `${Number(proofingIssueCount || 0)} stavefejl`
+                  : 'Stavekontrol fra')
+                : ''}
+            </Typography>
+          </span>
+        </Tooltip>
+        <Menu
+          anchorEl={proofingAnchor}
+          open={Boolean(proofingAnchor)}
+          onClose={closeProofing}
+          PaperProps={{ sx: { maxHeight: 420, width: 420 } }}
+        >
+          {(proofingIssues || []).slice(0, 80).map((p, idx) => (
+            <MenuItem
+              key={`${p.pageIndex}-${p.offerId}-${p.field}-${p.word}-${idx}`}
+              onClick={() => {
+                closeProofing();
+                if (typeof onSelectProofingIssue === 'function') onSelectProofingIssue(p);
+              }}
+            >
+              <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                <Typography variant="body2">
+                  Side {Number(p.pageIndex) + 1} · Offer {p.offerId} · {p.field}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" noWrap>
+                  “{p.word}” · {p.preview}
+                </Typography>
+              </Box>
+            </MenuItem>
+          ))}
+          {proofingIssues && proofingIssues.length > 80 && (
+            <MenuItem disabled>
+              <Typography variant="caption">Viser de første 80 stavefejl</Typography>
+            </MenuItem>
+          )}
+          {proofingIssues && proofingIssues.length === 0 && (
+            <MenuItem disabled>
+              <Typography variant="caption">Ingen stavefejl fundet</Typography>
             </MenuItem>
           )}
         </Menu>

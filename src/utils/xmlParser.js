@@ -42,6 +42,37 @@ const normalizeText = (value) => {
   return '';
 };
 
+const normalizeTextList = (value) => {
+  if (value === null || value === undefined) return [];
+  if (Array.isArray(value)) {
+    return value
+      .map((v) => normalizeText(v))
+      .map((v) => String(v || '').trim())
+      .filter(Boolean);
+  }
+  const one = String(normalizeText(value) || '').trim();
+  return one ? [one] : [];
+};
+
+function pickFirstCurrencyText(list, startIndex = 0) {
+  const items = Array.isArray(list) ? list : [];
+  for (let i = Math.max(0, startIndex); i < items.length; i += 1) {
+    const t = String(items[i] || '').trim();
+    if (!t) continue;
+    if (/\b(dkk|kr\.?|€|eur)\b/i.test(t)) return { text: t, index: i };
+    if (/\d/.test(t) && /[,.]\d{2}\b/.test(t)) return { text: t, index: i };
+  }
+  return { text: '', index: -1 };
+}
+
+function formatDkkSuffix(value) {
+  const t = String(value || '').trim();
+  if (!t) return '';
+  const m = t.match(/^DKK\s+(.+)$/i);
+  if (m) return `${String(m[1]).trim()} DKK`;
+  return t;
+}
+
 const extractLeafletMetadata = (leafletJson) => {
   const root = leafletJson['ns2:LeafletRequest'] || leafletJson.LeafletRequest;
   const layout = root?.DanskSupermarked?.AdvertisingLayout;
@@ -222,19 +253,23 @@ const extractContentTemplate = (template) => {
   
   const boxes = template.Box ? (Array.isArray(template.Box) ? template.Box : [template.Box]) : [];
   
-  const content = {};
+  const content = {
+    templateRows: [],
+  };
+
   boxes.forEach(box => {
     const propName = normalizeText(box.PropertyName);
-    const text = normalizeText(box.Text);
+    const propLower = String(propName || '').toLowerCase();
+    const texts = normalizeTextList(box.Text);
+    const joined = texts.join(' ').trim();
+    content.templateRows.push({ propertyName: propName, texts });
     
     if (propName.includes('Headline') || propName.includes('headline')) {
-      content.headline = text;
+      content.headline = joined;
     } else if (propName.includes('Body') || propName.includes('body')) {
-      content.bodyText = text;
-    } else if (propName.includes('Price') || propName.includes('price')) {
-      content.price = text;
+      content.bodyText = joined;
     } else if (propName.includes('Logo') || propName.includes('logo')) {
-      content.logo = text;
+      content.logo = joined;
     } else if (propName.includes('Image') && (box.ImageFileContentURI || box.HighResolutionImageFileContentURI)) {
       if (!content.images) content.images = [];
       content.images.push({
@@ -244,16 +279,57 @@ const extractContentTemplate = (template) => {
         publicId: normalizeText(box.PublicID)
       });
     } else if (propName.includes('SalesCondition')) {
-      content.salesCondition = text;
-    } else if (propName.toLowerCase().includes('salespricetext') || propName.toLowerCase().includes('disc')) {
+      content.salesCondition = joined;
+    } else if (/promo price/i.test(propName)) {
+      // Some XMLs encode multiple text tokens under a single promo-price property.
+      // Example: ["DKK 329,00", "DKK 102,20", "flaske", "op til"]
+      const promo = pickFirstCurrencyText(texts, 0);
+      const unit = pickFirstCurrencyText(texts, promo.index >= 0 ? promo.index + 1 : 1);
+      const hasUpTo = texts.some((t) => /\b(op\s*til|up\s*to)\b/i.test(String(t)));
+      const unitWord = texts.find((t) => /\b(flaske|flasker|stk\.?|pakke|kg|g|l|cl|ml)\b/i.test(String(t)));
+
+      if (promo.text) {
+        content.promoPrice = promo.text;
+        // Prefer promo price as the main displayed price.
+        content.price = promo.text;
+      }
+
+      if (unit.text) {
+        // Keep unit price available; formatted condition will be derived in merge using PriceMessageText/UnitSingular when present.
+        content.unitPrice = unit.text;
+        if (!content.unitSingular && unitWord) content.unitSingular = String(unitWord).trim();
+        if (!content.priceMessage2 && hasUpTo) content.priceMessage2 = 'op til';
+      }
+    } else if (propLower.includes('salespricetext1')) {
+      // Often the unit label for multi-buy, e.g. "flasker".
+      if (!content.salesPriceText && joined) content.salesPriceText = joined;
+    } else if (propLower.includes('salespricetext') || propLower.includes('disc')) {
       // Promo badge copy like "Frit valg" or "Ta' 3 for 2".
-      if (!content.salesText && text) content.salesText = text;
-    } else if (propName.toLowerCase().includes('buy quantity')) {
-      if (!content.buyQuantity && text) content.buyQuantity = text;
+      if (!content.salesText && joined) content.salesText = joined;
+    } else if (propLower.includes('buy quantity')) {
+      if (!content.buyQuantity && joined) content.buyQuantity = joined;
+    } else if (propLower.includes('pricemessagetext1')) {
+      // Often "Pr.".
+      if (!content.priceMessage1 && joined) content.priceMessage1 = joined;
+    } else if (propLower.includes('pricemessagetext2')) {
+      // Often "op til".
+      if (!content.priceMessage2 && joined) content.priceMessage2 = joined;
+    } else if (propLower.includes('unitsingular')) {
+      // Often "flaske".
+      if (!content.unitSingular && joined) content.unitSingular = joined;
+    } else if (propLower.includes('current regular price')) {
+      // In some templates this is the per-unit price (not a strike-through normal price).
+      if (!content.unitRegularPrice && joined) content.unitRegularPrice = joined;
     } else if (
       /(regular price|reg price|normalpris|normal price|current regular price)/i.test(propName)
     ) {
-      if (!content.normalPrice && text) content.normalPrice = text;
+      // Keep classic regular/normal price, but do not override when the template uses "Current Regular Price" as per-unit.
+      if (!/current regular price/i.test(propName)) {
+        if (!content.normalPrice && joined) content.normalPrice = joined;
+      }
+    } else if (propName.includes('Price') || propName.includes('price')) {
+      // Generic price fields. Promo/regular/unit prices are handled above.
+      if (!content.price && joined) content.price = joined;
     }
   });
   
@@ -327,6 +403,13 @@ export const mergeXMLs = (iprJson, leafletJson) => {
       let mergedHeadline = '';
       let mergedBodyText = '';
       let mergedPrice = '';
+      let mergedPromoPrice = '';
+      let mergedUnitPrice = '';
+      let mergedUnitRegularPrice = '';
+      let mergedUnitSingular = '';
+      let mergedPriceMessage1 = '';
+      let mergedPriceMessage2 = '';
+      let mergedSalesPriceText = '';
       let mergedLogo = '';
       let mergedNormalPrice = '';
       let mergedSalesText = '';
@@ -337,6 +420,13 @@ export const mergeXMLs = (iprJson, leafletJson) => {
         if (box.template) {
           if (box.template.headline) mergedHeadline = box.template.headline;
           if (box.template.bodyText) mergedBodyText = box.template.bodyText;
+          if (box.template.promoPrice) mergedPromoPrice = box.template.promoPrice;
+          if (box.template.unitPrice) mergedUnitPrice = box.template.unitPrice;
+          if (box.template.unitRegularPrice) mergedUnitRegularPrice = box.template.unitRegularPrice;
+          if (box.template.unitSingular) mergedUnitSingular = box.template.unitSingular;
+          if (box.template.priceMessage1) mergedPriceMessage1 = box.template.priceMessage1;
+          if (box.template.priceMessage2) mergedPriceMessage2 = box.template.priceMessage2;
+          if (box.template.salesPriceText) mergedSalesPriceText = box.template.salesPriceText;
           if (box.template.price) mergedPrice = box.template.price;
           if (box.template.logo) mergedLogo = box.template.logo;
           if (box.template.normalPrice) mergedNormalPrice = box.template.normalPrice;
@@ -345,6 +435,21 @@ export const mergeXMLs = (iprJson, leafletJson) => {
           if (box.template.salesCondition) mergedSalesCondition = box.template.salesCondition;
         }
       });
+
+      // Prefer promo price when available
+      const finalPrice = mergedPromoPrice || mergedPrice;
+
+      // Derive per-unit condition line when price-message parts exist.
+      const unitPriceText = mergedUnitRegularPrice || mergedUnitPrice;
+      let derivedCondition = '';
+      if (unitPriceText) {
+        const p1 = String(mergedPriceMessage1 || '').trim();
+        const unit = String(mergedUnitSingular || '').trim();
+        const p2 = String(mergedPriceMessage2 || '').trim();
+        const formatted = formatDkkSuffix(unitPriceText);
+        const parts = [p1, unit, p2, formatted].filter(Boolean);
+        derivedCondition = parts.join(' ').replace(/\s+/g, ' ').trim();
+      }
       
       // Add product details from IPR
       const products = [];
@@ -358,11 +463,15 @@ export const mergeXMLs = (iprJson, leafletJson) => {
           ...block.offer,
           headline: mergedHeadline || block.offer.name,
           bodyText: mergedBodyText,
-          price: mergedPrice,
+          price: finalPrice,
           normalPrice: mergedNormalPrice,
           salesText: mergedSalesText,
           buyQuantity: mergedBuyQuantity,
-          salesCondition: mergedSalesCondition,
+          salesCondition: mergedSalesCondition || derivedCondition,
+          promoPrice: mergedPromoPrice,
+          unitPrice: mergedUnitRegularPrice || mergedUnitPrice,
+          unitSingular: mergedUnitSingular,
+          salesPriceText: mergedSalesPriceText,
           logo: mergedLogo,
           images: imageDetails,
           products: products

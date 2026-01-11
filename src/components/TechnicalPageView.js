@@ -143,6 +143,39 @@ function TechnicalPageView({ area, areaIndex, metadata, fileInfo }) {
                       excludeKeys={['boxes', 'images', 'products']}
                     />
 
+                    {(() => {
+                      const rows = [];
+                      (offer.boxes || []).forEach((b) => {
+                        const tplRows = b?.template?.templateRows;
+                        if (Array.isArray(tplRows)) rows.push(...tplRows);
+                      });
+                      const filtered = rows.filter((r) => r && (r.propertyName || (Array.isArray(r.texts) && r.texts.length)));
+                      if (!filtered.length) return null;
+                      return (
+                        <Box sx={{ mt: 1.5 }}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
+                            ContentTemplate (rå)
+                          </Typography>
+                          <Table size="small" sx={{ '& td': { verticalAlign: 'top' } }}>
+                            <TableBody>
+                              {filtered.slice(0, 250).map((r, i) => (
+                                <TableRow key={`${r.propertyName || 'row'}-${i}`}>
+                                  <TableCell sx={{ width: 260, fontWeight: 600 }}>
+                                    {r.propertyName || '(ingen PropertyName)'}
+                                  </TableCell>
+                                  <TableCell sx={{ wordBreak: 'break-word' }}>
+                                    <Typography variant="body2">
+                                      {(Array.isArray(r.texts) ? r.texts : [r.texts]).filter(Boolean).join(' | ')}
+                                    </Typography>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </Box>
+                      );
+                    })()}
+
                     {Array.isArray(offer.images) && offer.images.length > 0 ? (
                       <KeyValueTable title="Images" obj={{ images: offer.images }} />
                     ) : null}

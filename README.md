@@ -36,7 +36,32 @@ npm install
 npm start
 ```
 
+4. (Optional) Start the collaboration server (real-time sync, comments, approval status, versions):
+
+Open a second terminal and run:
+```bash
+npm run server
+```
+
+The collaboration server listens on `http://localhost:4000` and expects the React app on `http://localhost:3000`.
+
 The application will open in your browser at `http://localhost:3000`
+
+### Collaboration notes (prototype)
+
+- When collaboration is enabled, the app will prompt for a name (stored in localStorage).
+- You can toggle collaboration on/off via the **"Samarbejde"** switch in the top toolbar (unless `REACT_APP_COLLAB` forces it).
+- Open the same leaflet/event in two browser tabs to test live sync.
+- The backend store is in-memory (restarting the server clears sessions, comments, versions, audit log).
+
+**Environment variables**
+
+- Frontend:
+  - `REACT_APP_COLLAB=1` (enable) or `REACT_APP_COLLAB=0` (disable)
+  - `REACT_APP_SERVER_URL=http://localhost:4000`
+- Backend:
+  - `PORT=4000`
+  - `CLIENT_ORIGIN=http://localhost:3000`
 
 ## 📁 Project Structure
 
@@ -196,6 +221,7 @@ Only clean, user-friendly content is displayed:
 - ✅ Editing mode (offer fields)
 - ✅ Layout editing (reorder + width presets + per-event persistence)
 - ✅ Export: PDF, JSON, updated Leaflet XML
+- ✅ Collaboration (prototype): presence, approval status, comments, versions + audit log (requires `npm run server`)
 
 ### 🚧 In Progress / Coming Soon
 

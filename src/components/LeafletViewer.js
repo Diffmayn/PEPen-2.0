@@ -7,7 +7,7 @@ import PageRenderer from './PageRenderer';
 import TechnicalPageView from './TechnicalPageView';
 import './LeafletViewer.css';
 
-function LeafletViewer({ data, viewMode, currentPage, setCurrentPage, zoom, editMode, onOfferUpdate, exportAllPagesSignal, flipEnabled, isFullscreen, searchTerm, highlightPageIndex, technicalView, fileInfo, layoutByAreaId, onLayoutChange }) {
+function LeafletViewer({ data, viewMode, currentPage, setCurrentPage, zoom, editMode, onOfferUpdate, exportAllPagesSignal, flipEnabled, isFullscreen, searchTerm, highlightPageIndex, technicalView, fileInfo, layoutByAreaId, onLayoutChange, commentsByOfferId, onOpenComments, offerFilter, focusedOfferId, scrollToPageRequest, proofingByOfferId, proofingEnabled }) {
   const [selectedOfferId, setSelectedOfferId] = useState(null);
   const [loadedPages, setLoadedPages] = useState(() => new Set([0]));
   const [thumbnails, setThumbnails] = useState(() => ({}));
@@ -24,6 +24,12 @@ function LeafletViewer({ data, viewMode, currentPage, setCurrentPage, zoom, edit
     if (!editMode) return;
     setSelectedOfferId(offer?.id ?? null);
   };
+
+  useEffect(() => {
+    const id = String(focusedOfferId || '').trim();
+    if (!id) return;
+    setSelectedOfferId(id);
+  }, [focusedOfferId]);
 
   const scrollToPage = useCallback((index) => {
     if (flipEnabled) {
@@ -43,6 +49,13 @@ function LeafletViewer({ data, viewMode, currentPage, setCurrentPage, zoom, edit
     }
     setCurrentPage(index);
   }, [flipEnabled, setCurrentPage, viewMode]);
+
+  useEffect(() => {
+    if (!scrollToPageRequest) return;
+    const index = scrollToPageRequest?.pageIndex;
+    if (typeof index !== 'number' || Number.isNaN(index)) return;
+    scrollToPage(index);
+  }, [scrollToPageRequest?.nonce, scrollToPage, scrollToPageRequest]);
 
   const pageItemMinHeight = useMemo(() => {
     if (viewMode === 'mobile') return 667;
@@ -203,8 +216,11 @@ function LeafletViewer({ data, viewMode, currentPage, setCurrentPage, zoom, edit
       const api = flipBookRef.current?.pageFlip?.();
       if (!api) return;
       if (api.getCurrentPageIndex && api.getCurrentPageIndex() === currentPage) return;
-      if (api.turnToPage) api.turnToPage(currentPage);
-      else if (api.flip) api.flip(currentPage);
+      if (api.turnToPage) {
+        api.turnToPage(currentPage);
+      } else if (api.flip) {
+        api.flip(currentPage);
+      }
     } catch (_) {
       // ignore
     }
@@ -251,6 +267,9 @@ function LeafletViewer({ data, viewMode, currentPage, setCurrentPage, zoom, edit
             highlightEnabled={index === highlightPageIndex}
             layout={area?.id ? layoutByAreaId?.[area.id] : null}
             onLayoutChange={onLayoutChange}
+            offerFilter={offerFilter}
+            proofingByOfferId={proofingByOfferId}
+            proofingEnabled={proofingEnabled}
             mobile
           />
         </Box>
@@ -272,6 +291,9 @@ function LeafletViewer({ data, viewMode, currentPage, setCurrentPage, zoom, edit
             highlightEnabled={index === highlightPageIndex}
             layout={area?.id ? layoutByAreaId?.[area.id] : null}
             onLayoutChange={onLayoutChange}
+            offerFilter={offerFilter}
+            proofingByOfferId={proofingByOfferId}
+            proofingEnabled={proofingEnabled}
           />
         </Paper>
       );
@@ -292,6 +314,11 @@ function LeafletViewer({ data, viewMode, currentPage, setCurrentPage, zoom, edit
         highlightEnabled={index === highlightPageIndex}
         layout={area?.id ? layoutByAreaId?.[area.id] : null}
         onLayoutChange={onLayoutChange}
+        commentsByOfferId={commentsByOfferId}
+        onOpenComments={onOpenComments}
+        offerFilter={offerFilter}
+        proofingByOfferId={proofingByOfferId}
+        proofingEnabled={proofingEnabled}
       />
     );
   };

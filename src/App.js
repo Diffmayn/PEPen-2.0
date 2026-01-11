@@ -1,11 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
+import { Box, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Snackbar, Alert } from '@mui/material';
 import FileUploader from './components/FileUploader';
 import LeafletViewer from './components/LeafletViewer';
 import Toolbar from './components/Toolbar';
 import BottomBar from './components/BottomBar';
+import CommentsDrawer from './components/CommentsDrawer';
+import VersionsDrawer from './components/VersionsDrawer';
 import { loadXMLPair } from './utils/xmlParser';
+import { connectSocket, getOrCreateClientId, isCollabEnabled, loadUser, saveUser } from './utils/collab';
+import { getDanishSpellchecker, findMisspellingsSync, buildContextPreview } from './utils/spellcheck';
 import './App.css';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -21,6 +26,69 @@ const theme = createTheme({
   },
   typography: {
     fontFamily: 'Arial, Helvetica, sans-serif',
+    fontSize: 13,
+  },
+  components: {
+    MuiTypography: {
+      styleOverrides: {
+        root: {
+          lineHeight: 1.25,
+        },
+      },
+    },
+    MuiButton: {
+      defaultProps: {
+        size: 'small',
+      },
+    },
+    MuiIconButton: {
+      defaultProps: {
+        size: 'small',
+      },
+    },
+    MuiTextField: {
+      defaultProps: {
+        size: 'small',
+        margin: 'dense',
+      },
+    },
+    MuiFormControl: {
+      defaultProps: {
+        margin: 'dense',
+        size: 'small',
+      },
+    },
+    MuiInputLabel: {
+      styleOverrides: {
+        root: {
+          fontSize: 12,
+        },
+      },
+    },
+    MuiOutlinedInput: {
+      styleOverrides: {
+        input: {
+          fontSize: 12,
+          paddingTop: 6,
+          paddingBottom: 6,
+        },
+      },
+    },
+    MuiInputBase: {
+      styleOverrides: {
+        input: {
+          fontSize: 12,
+        },
+      },
+    },
+    MuiMenuItem: {
+      styleOverrides: {
+        root: {
+          fontSize: 12,
+          minHeight: 32,
+        },
+      },
+    },
   },
 });
 
@@ -71,7 +139,75 @@ function App() {
   const [flipEnabled, setFlipEnabled] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [proofingEnabled, setProofingEnabled] = useState(true);
+  const [spellchecker, setSpellchecker] = useState(null);
+  const [spellcheckerError, setSpellcheckerError] = useState(null);
+  const [offerIdFilter, setOfferIdFilter] = useState('');
+  const [purchasingGroupFilter, setPurchasingGroupFilter] = useState('');
+  const [focusedOfferId, setFocusedOfferId] = useState('');
+  const [scrollToPageRequest, setScrollToPageRequest] = useState(null);
   const [fileInfo, setFileInfo] = useState(null);
+
+  const collabEnvOverride = useMemo(() => {
+    const raw = String(process.env.REACT_APP_COLLAB || '').trim().toLowerCase();
+    if (!raw) return null;
+    if (raw === '1' || raw === 'true') return true;
+    if (raw === '0' || raw === 'false') return false;
+    return null;
+  }, []);
+
+  const [collabEnabledLocal, setCollabEnabledLocal] = useState(() => {
+    try {
+      return isCollabEnabled();
+    } catch (_) {
+      return false;
+    }
+  });
+
+  const collabEnabled = collabEnvOverride !== null ? collabEnvOverride : collabEnabledLocal;
+
+  const toggleCollabEnabled = useCallback(
+    (nextEnabled) => {
+      if (collabEnvOverride !== null) return;
+      try {
+        localStorage.setItem('pepen.collab.enabled', nextEnabled ? '1' : '0');
+      } catch (_) {
+        // ignore
+      }
+      setCollabEnabledLocal(!!nextEnabled);
+      if (!nextEnabled) {
+        setVersionsOpen(false);
+        setCommentsOpen(false);
+      }
+    },
+    [collabEnvOverride]
+  );
+  const clientId = useMemo(() => getOrCreateClientId(), []);
+  const socketRef = useRef(null);
+  const [collabConnected, setCollabConnected] = useState(false);
+  const [collabUsers, setCollabUsers] = useState([]);
+
+  const [user, setUser] = useState(() => loadUser());
+  const [userDialogOpen, setUserDialogOpen] = useState(false);
+  const [draftUserName, setDraftUserName] = useState('');
+  const [draftUserEmail, setDraftUserEmail] = useState('');
+
+  const [leafletStatus, setLeafletStatus] = useState('draft');
+  const [commentsByOfferId, setCommentsByOfferId] = useState({});
+  const [versions, setVersions] = useState([]);
+  const [audit, setAudit] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [notificationsUnread, setNotificationsUnread] = useState(0);
+  const [toast, setToast] = useState(null);
+
+  const [versionsOpen, setVersionsOpen] = useState(false);
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [commentsContext, setCommentsContext] = useState(null);
+
+  const [dirtySinceLastVersion, setDirtySinceLastVersion] = useState(false);
+
+  const currentPageRef = useRef(currentPage);
+  const dirtySinceLastVersionRef = useRef(dirtySinceLastVersion);
 
   const [dirHandle, setDirHandle] = useState(null);
   const [folderEvents, setFolderEvents] = useState([]);
@@ -219,6 +355,176 @@ function App() {
 
   const normalizedSearchTerm = useMemo(() => String(searchTerm || '').trim().toLowerCase(), [searchTerm]);
 
+  useEffect(() => {
+    let cancelled = false;
+    getDanishSpellchecker()
+      .then((sp) => {
+        if (cancelled) return;
+        setSpellchecker(sp);
+        setSpellcheckerError(null);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setSpellchecker(null);
+        setSpellcheckerError(String(err?.message || err || 'Kunne ikke indlæse stavekontrol'));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const offerAndGroupIndex = useMemo(() => {
+    const offerById = new Map();
+    const groupByKey = new Map();
+
+    const areas = leafletData?.areas || [];
+    areas.forEach((area, pageIndex) => {
+      (area?.blocks || []).forEach((block) => {
+        const offer = block?.offer;
+        if (!offer) return;
+
+        const offerId = String(offer.id || '').trim();
+        if (offerId && !offerById.has(offerId)) {
+          const headline = String(offer.headline || offer.name || '').trim();
+          offerById.set(offerId, {
+            id: offerId,
+            pageIndex,
+            headline,
+            label: headline ? `${offerId} · ${headline}` : offerId,
+          });
+        }
+
+        const groupDesc = String(offer.purchasingGroupDescription || '').trim();
+        const groupCode = String(offer.purchasingGroup || '').trim();
+        const groupKey = groupDesc || groupCode;
+        if (groupKey) {
+          const existing = groupByKey.get(groupKey);
+          if (!existing) {
+            groupByKey.set(groupKey, {
+              key: groupKey,
+              label: groupKey,
+              pageIndex,
+              count: 1,
+            });
+          } else {
+            existing.count += 1;
+          }
+        }
+      });
+    });
+
+    const offerOptions = Array.from(offerById.values()).sort((a, b) => a.id.localeCompare(b.id));
+    const groupOptions = Array.from(groupByKey.values())
+      .map((g) => ({ ...g, label: g.count ? `${g.label} (${g.count})` : g.label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+
+    return {
+      offerById,
+      groupByKey,
+      offerOptions,
+      groupOptions,
+    };
+  }, [leafletData]);
+
+  const proofing = useMemo(() => {
+    if (!leafletData) return { byOfferId: {}, issues: [] };
+    if (!proofingEnabled) return { byOfferId: {}, issues: [] };
+    if (!spellchecker) return { byOfferId: {}, issues: [] };
+
+    const byOfferId = {};
+    const issues = [];
+
+    const areas = leafletData?.areas || [];
+    areas.forEach((area, pageIndex) => {
+      (area?.blocks || []).forEach((block) => {
+        const offer = block?.offer;
+        if (!offer) return;
+
+        const offerId = String(offer.id || '').trim();
+        if (!offerId) return;
+
+        const fields = [
+          { key: 'headline', label: 'Headline', text: offer.headline || offer.name || '' },
+          { key: 'bodyText', label: 'Body text', text: offer.bodyText || '' },
+          { key: 'salesCondition', label: 'Betingelse', text: offer.salesCondition || '' },
+          { key: 'salesText', label: 'Badge', text: offer.salesText || '' },
+        ];
+
+        fields.forEach((f) => {
+          const text = String(f.text || '');
+          if (!text.trim()) return;
+
+          const raw = findMisspellingsSync(spellchecker, text);
+          const mistakes = raw.filter((m) => !/^[A-ZÆØÅ]{2,}$/.test(String(m.word || '')));
+          if (!mistakes.length) return;
+
+          byOfferId[offerId] = byOfferId[offerId] || {};
+          byOfferId[offerId][f.key] = mistakes;
+
+          mistakes.forEach((m) => {
+            issues.push({
+              offerId,
+              pageIndex,
+              field: f.label,
+              word: m.word,
+              preview: buildContextPreview(text, m),
+            });
+          });
+        });
+      });
+    });
+
+    return { byOfferId, issues };
+  }, [leafletData, proofingEnabled, spellchecker]);
+
+  const offerFilterFn = useMemo(() => {
+    const id = String(offerIdFilter || '').trim();
+    const groupKey = String(purchasingGroupFilter || '').trim();
+    if (!id && !groupKey) return null;
+    if (id) {
+      return (offer) => String(offer?.id || '').trim() === id;
+    }
+    return (offer) => {
+      const desc = String(offer?.purchasingGroupDescription || '').trim();
+      const code = String(offer?.purchasingGroup || '').trim();
+      return desc === groupKey || code === groupKey;
+    };
+  }, [offerIdFilter, purchasingGroupFilter]);
+
+  const requestScrollToPage = useCallback((pageIndex) => {
+    if (typeof pageIndex !== 'number' || Number.isNaN(pageIndex)) return;
+    setScrollToPageRequest({ pageIndex, nonce: Date.now() });
+  }, []);
+
+  const handleSelectOfferId = useCallback((nextOfferId) => {
+    const id = String(nextOfferId || '').trim();
+    setOfferIdFilter(id);
+    setPurchasingGroupFilter('');
+    setFocusedOfferId(id);
+    if (!id) return;
+    const hit = offerAndGroupIndex.offerById.get(id);
+    if (hit && typeof hit.pageIndex === 'number') requestScrollToPage(hit.pageIndex);
+  }, [offerAndGroupIndex.offerById, requestScrollToPage]);
+
+  const handleSelectPurchasingGroup = useCallback((nextGroupKey) => {
+    const key = String(nextGroupKey || '').trim();
+    setPurchasingGroupFilter(key);
+    setOfferIdFilter('');
+    setFocusedOfferId('');
+    if (!key) return;
+    const hit = offerAndGroupIndex.groupByKey.get(key);
+    if (hit && typeof hit.pageIndex === 'number') requestScrollToPage(hit.pageIndex);
+  }, [offerAndGroupIndex.groupByKey, requestScrollToPage]);
+
+  const handleSelectProofingIssue = useCallback((issue) => {
+    const offerId = String(issue?.offerId || '').trim();
+    const pageIndex = issue?.pageIndex;
+    if (!offerId) return;
+    setFocusedOfferId(offerId);
+    if (typeof pageIndex === 'number' && !Number.isNaN(pageIndex)) requestScrollToPage(pageIndex);
+  }, [requestScrollToPage]);
+
   const brandMeta = leafletData?.metadata || null;
   const validityLabel = useMemo(
     () => formatDkDateRange(brandMeta?.validFrom, brandMeta?.validTo),
@@ -275,6 +581,47 @@ function App() {
     return `pepen.layout.${String(id)}`;
   }, [campaignId, leafletData?.metadata?.promotionEventName]);
 
+  const leafletId = useMemo(() => {
+    return String(campaignId || leafletData?.metadata?.promotionEventName || 'unknown');
+  }, [campaignId, leafletData?.metadata?.promotionEventName]);
+
+  const commentsStorageKey = useMemo(() => `pepen.comments.${leafletId}`, [leafletId]);
+  const statusStorageKey = useMemo(() => `pepen.status.${leafletId}`, [leafletId]);
+
+  const leafletIdRef = useRef(leafletId);
+  const leafletDataRef = useRef(leafletData);
+  const rawLeafletXmlRef = useRef(rawLeafletXml);
+  const fileInfoRef = useRef(fileInfo);
+  const layoutByAreaIdRef = useRef(layoutByAreaId);
+  const userRef = useRef(user);
+
+  useEffect(() => {
+    currentPageRef.current = currentPage;
+  }, [currentPage]);
+
+  useEffect(() => {
+    dirtySinceLastVersionRef.current = dirtySinceLastVersion;
+  }, [dirtySinceLastVersion]);
+
+  useEffect(() => {
+    leafletIdRef.current = leafletId;
+  }, [leafletId]);
+  useEffect(() => {
+    leafletDataRef.current = leafletData;
+  }, [leafletData]);
+  useEffect(() => {
+    rawLeafletXmlRef.current = rawLeafletXml;
+  }, [rawLeafletXml]);
+  useEffect(() => {
+    fileInfoRef.current = fileInfo;
+  }, [fileInfo]);
+  useEffect(() => {
+    layoutByAreaIdRef.current = layoutByAreaId;
+  }, [layoutByAreaId]);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
   useEffect(() => {
     if (!leafletData) return;
     try {
@@ -303,17 +650,258 @@ function App() {
     }
   }, [layoutByAreaId, leafletData, layoutStorageKey]);
 
-  const handleLayoutChange = useCallback(({ areaId, nextLayout }) => {
-    if (!areaId) return;
-    if (!nextLayout || typeof nextLayout !== 'object') return;
-    setLayoutByAreaId((prev) => ({
-      ...(prev || {}),
-      [areaId]: {
+  useEffect(() => {
+    if (!collabEnabled) return;
+    if (user) return;
+    setDraftUserName('');
+    setDraftUserEmail('');
+    setUserDialogOpen(true);
+  }, [collabEnabled, user]);
+
+  useEffect(() => {
+    if (!leafletData) return;
+    if (collabConnected) return;
+    try {
+      const rawStatus = localStorage.getItem(statusStorageKey);
+      if (rawStatus) setLeafletStatus(String(rawStatus));
+    } catch (_) {
+      // ignore
+    }
+    try {
+      const rawComments = localStorage.getItem(commentsStorageKey);
+      if (rawComments) {
+        const parsed = JSON.parse(rawComments);
+        if (parsed && typeof parsed === 'object') setCommentsByOfferId(parsed);
+      }
+    } catch (_) {
+      // ignore
+    }
+  }, [collabConnected, commentsStorageKey, leafletData, statusStorageKey]);
+
+  useEffect(() => {
+    if (!leafletData) return;
+    if (collabConnected) return;
+    try {
+      localStorage.setItem(statusStorageKey, String(leafletStatus || 'draft'));
+    } catch (_) {
+      // ignore
+    }
+  }, [collabConnected, leafletData, leafletStatus, statusStorageKey]);
+
+  useEffect(() => {
+    if (!leafletData) return;
+    if (collabConnected) return;
+    try {
+      localStorage.setItem(commentsStorageKey, JSON.stringify(commentsByOfferId || {}));
+    } catch (_) {
+      // ignore
+    }
+  }, [collabConnected, commentsByOfferId, commentsStorageKey, leafletData]);
+
+  useEffect(() => {
+    if (!collabEnabled) return;
+    if (!user) return;
+
+    const socket = connectSocket();
+    socketRef.current = socket;
+
+    const onConnect = () => setCollabConnected(true);
+    const onDisconnect = () => setCollabConnected(false);
+
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+
+    socket.on('presence:list', (payload) => {
+      if (!payload) return;
+      if (String(payload.leafletId || '') !== String(leafletIdRef.current || '')) return;
+      setCollabUsers(Array.isArray(payload.users) ? payload.users : []);
+    });
+
+    socket.on('doc:sync', (payload) => {
+      if (!payload || String(payload.leafletId || '') !== String(leafletIdRef.current || '')) return;
+      const state = payload.state || {};
+      if (state.doc) setLeafletData(state.doc);
+      if (state.rawLeafletXml != null) setRawLeafletXml(state.rawLeafletXml);
+      if (state.fileInfo != null) setFileInfo(state.fileInfo);
+      if (state.layoutByAreaId) setLayoutByAreaId(state.layoutByAreaId);
+      if (state.status) setLeafletStatus(state.status);
+      if (state.commentsByOfferId) setCommentsByOfferId(state.commentsByOfferId);
+      if (Array.isArray(state.versions)) setVersions(state.versions);
+      if (Array.isArray(state.audit)) setAudit(state.audit);
+      setDirtySinceLastVersion(false);
+    });
+
+    socket.on('doc:missing', (payload) => {
+      if (!payload || String(payload.leafletId || '') !== String(leafletIdRef.current || '')) return;
+      if (!leafletDataRef.current) return;
+      socket.emit('doc:set', {
+        leafletId: leafletIdRef.current,
+        doc: leafletDataRef.current,
+        rawLeafletXml: rawLeafletXmlRef.current,
+        fileInfo: fileInfoRef.current,
+        layoutByAreaId: layoutByAreaIdRef.current,
+        user: userRef.current,
+      });
+    });
+
+    socket.on('offer:update', (payload) => {
+      if (!payload || String(payload.leafletId || '') !== String(leafletIdRef.current || '')) return;
+      if (payload.clientId && payload.clientId === clientId) return;
+      const { areaIndex, blockIndex, changes } = payload;
+      if (!changes || typeof changes !== 'object') return;
+
+      setLeafletData((prev) => {
+        if (!prev || !Array.isArray(prev.areas)) return prev;
+        if (areaIndex < 0 || areaIndex >= prev.areas.length) return prev;
+        const nextAreas = prev.areas.map((area, idx) => {
+          if (idx !== areaIndex) return area;
+          if (!area || !Array.isArray(area.blocks)) return area;
+          if (blockIndex < 0 || blockIndex >= area.blocks.length) return area;
+          const nextBlocks = area.blocks.map((block, bIdx) => {
+            if (bIdx !== blockIndex) return block;
+            if (!block || !block.offer) return block;
+            return { ...block, offer: { ...block.offer, ...changes } };
+          });
+          return { ...area, blocks: nextBlocks };
+        });
+        return { ...prev, areas: nextAreas };
+      });
+    });
+
+    socket.on('layout:update', (payload) => {
+      if (!payload || String(payload.leafletId || '') !== String(leafletIdRef.current || '')) return;
+      if (payload.clientId && payload.clientId === clientId) return;
+      const { areaId, nextLayout } = payload;
+      if (!areaId) return;
+      setLayoutByAreaId((prev) => {
+        const next = { ...(prev || {}) };
+        if (nextLayout == null) {
+          delete next[areaId];
+        } else {
+          next[areaId] = nextLayout;
+        }
+        return next;
+      });
+    });
+
+    socket.on('status:set', (payload) => {
+      if (!payload || String(payload.leafletId || '') !== String(leafletIdRef.current || '')) return;
+      if (payload.clientId && payload.clientId === clientId) return;
+      setLeafletStatus(payload.status || 'draft');
+      setToast({ severity: 'info', message: `Status blev ændret til ${payload.status}` });
+    });
+
+    socket.on('comment:add', (payload) => {
+      if (!payload || String(payload.leafletId || '') !== String(leafletIdRef.current || '')) return;
+      if (payload.clientId && payload.clientId === clientId) return;
+      const c = payload.comment;
+      if (!c || !c.offerId) return;
+      setCommentsByOfferId((prev) => {
+        const next = { ...(prev || {}) };
+        const key = String(c.offerId);
+        const list = Array.isArray(next[key]) ? next[key].slice(0) : [];
+        list.push(c);
+        next[key] = list;
+        return next;
+      });
+    });
+
+    socket.on('versions:list', (payload) => {
+      if (!payload || String(payload.leafletId || '') !== String(leafletIdRef.current || '')) return;
+      setVersions(Array.isArray(payload.versions) ? payload.versions : []);
+    });
+
+    socket.on('audit:entry', (payload) => {
+      if (!payload || String(payload.leafletId || '') !== String(leafletIdRef.current || '')) return;
+      const entry = payload.entry;
+      if (!entry) return;
+      setAudit((prev) => [entry, ...(prev || [])]);
+      setNotifications((prev) => [entry, ...(prev || [])].slice(0, 50));
+      setNotificationsUnread((n) => n + 1);
+    });
+
+    return () => {
+      try {
+        socket.off('connect', onConnect);
+        socket.off('disconnect', onDisconnect);
+        socket.disconnect();
+      } catch (_) {
+        // ignore
+      }
+      socketRef.current = null;
+      setCollabConnected(false);
+      setCollabUsers([]);
+    };
+  }, [clientId, collabEnabled, user]);
+
+  useEffect(() => {
+    if (!collabEnabled) return;
+    if (!collabConnected) return;
+    if (!user) return;
+    if (!leafletId) return;
+
+    const socket = socketRef.current;
+    if (!socket) return;
+    socket.emit('room:join', { leafletId, user, pageIndex: currentPageRef.current });
+  }, [collabConnected, collabEnabled, leafletId, user]);
+
+  useEffect(() => {
+    if (!collabEnabled) return;
+    if (!collabConnected) return;
+    if (!user) return;
+    if (!leafletId) return;
+
+    const socket = socketRef.current;
+    if (!socket) return;
+    socket.emit('presence:update', { leafletId, user, pageIndex: currentPage });
+  }, [collabConnected, collabEnabled, currentPage, leafletId, user]);
+
+  useEffect(() => {
+    if (!collabEnabled) return;
+    if (!collabConnected) return;
+    const id = setInterval(() => {
+      if (!dirtySinceLastVersionRef.current) return;
+      const socket = socketRef.current;
+      if (!socket) return;
+      if (!leafletIdRef.current) return;
+      if (!userRef.current) return;
+      socket.emit('version:save', { leafletId: leafletIdRef.current, summary: 'Autosave', user: userRef.current });
+      setDirtySinceLastVersion(false);
+    }, 30000);
+
+    return () => clearInterval(id);
+  }, [collabConnected, collabEnabled]);
+
+  const handleLayoutChange = useCallback(
+    ({ areaId, nextLayout }) => {
+      if (!areaId) return;
+      if (!nextLayout || typeof nextLayout !== 'object') return;
+
+      const sanitized = {
         order: Array.isArray(nextLayout.order) ? nextLayout.order : [],
         sizes: nextLayout.sizes && typeof nextLayout.sizes === 'object' ? nextLayout.sizes : {},
-      },
-    }));
-  }, []);
+      };
+
+      setLayoutByAreaId((prev) => ({
+        ...(prev || {}),
+        [areaId]: sanitized,
+      }));
+
+      setDirtySinceLastVersion(true);
+
+      const socket = socketRef.current;
+      if (collabEnabled && collabConnected && socket) {
+        socket.emit('layout:update', {
+          leafletId: leafletIdRef.current,
+          areaId,
+          nextLayout: sanitized,
+          clientId,
+          user: userRef.current,
+        });
+      }
+    },
+    [clientId, collabConnected, collabEnabled]
+  );
 
   const resetLayoutForCurrentPage = useCallback(() => {
     if (!leafletData?.areas?.length) return;
@@ -326,7 +914,20 @@ function App() {
       delete next[areaId];
       return next;
     });
-  }, [currentPage, leafletData]);
+
+    setDirtySinceLastVersion(true);
+
+    const socket = socketRef.current;
+    if (collabEnabled && collabConnected && socket) {
+      socket.emit('layout:update', {
+        leafletId: leafletIdRef.current,
+        areaId,
+        nextLayout: null,
+        clientId,
+        user: userRef.current,
+      });
+    }
+  }, [clientId, collabConnected, collabEnabled, currentPage, leafletData]);
 
   const goToPage = useCallback((index) => {
     if (!totalPages) return;
@@ -418,7 +1019,125 @@ function App() {
         areas: nextAreas,
       };
     });
+
+    setDirtySinceLastVersion(true);
+
+    const socket = socketRef.current;
+    if (collabEnabled && collabConnected && socket) {
+      socket.emit('offer:update', {
+        leafletId: leafletIdRef.current,
+        areaIndex,
+        blockIndex,
+        changes,
+        clientId,
+        user: userRef.current,
+      });
+    }
   };
+
+  const onSetLeafletStatus = useCallback(
+    (next) => {
+      const status = String(next || 'draft');
+      setLeafletStatus(status);
+      setDirtySinceLastVersion(true);
+
+      const socket = socketRef.current;
+      if (collabEnabled && collabConnected && socket) {
+        socket.emit('status:set', {
+          leafletId: leafletIdRef.current,
+          status,
+          clientId,
+          user: userRef.current,
+        });
+      }
+    },
+    [clientId, collabConnected, collabEnabled]
+  );
+
+  const onMarkNotificationsRead = useCallback(() => {
+    setNotificationsUnread(0);
+  }, []);
+
+  const onOpenVersions = useCallback(() => {
+    setVersionsOpen(true);
+  }, []);
+
+  const onOpenComments = useCallback((ctx) => {
+    if (!ctx || !ctx.offerId) return;
+    setCommentsContext(ctx);
+    setCommentsOpen(true);
+  }, []);
+
+  const currentCommentsOffer = useMemo(() => {
+    const ctx = commentsContext;
+    if (!ctx || !leafletData) return null;
+    const area = leafletData?.areas?.[ctx.areaIndex];
+    const block = area?.blocks?.[ctx.blockIndex];
+    return block?.offer || null;
+  }, [commentsContext, leafletData]);
+
+  const currentCommentsList = useMemo(() => {
+    const offerId = commentsContext?.offerId;
+    if (!offerId) return [];
+    return commentsByOfferId?.[String(offerId)] || [];
+  }, [commentsByOfferId, commentsContext?.offerId]);
+
+  const onAddComment = useCallback(
+    (offerId, text, pageIndex) => {
+      const id = String(offerId || '').trim();
+      const t = String(text || '').trim();
+      if (!id || !t) return;
+
+      const localComment = {
+        id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
+        at: new Date().toISOString(),
+        offerId: id,
+        pageIndex: typeof pageIndex === 'number' ? pageIndex : null,
+        user: userRef.current,
+        text: t,
+      };
+
+      setCommentsByOfferId((prev) => {
+        const next = { ...(prev || {}) };
+        const list = Array.isArray(next[id]) ? next[id].slice(0) : [];
+        list.push(localComment);
+        next[id] = list;
+        return next;
+      });
+
+      setDirtySinceLastVersion(true);
+
+      const socket = socketRef.current;
+      if (collabEnabled && collabConnected && socket) {
+        socket.emit('comment:add', {
+          leafletId: leafletIdRef.current,
+          offerId: id,
+          text: t,
+          pageIndex: typeof pageIndex === 'number' ? pageIndex : null,
+          clientId,
+          user: userRef.current,
+        });
+      }
+    },
+    [clientId, collabConnected, collabEnabled]
+  );
+
+  const onSaveVersionNow = useCallback(() => {
+    const socket = socketRef.current;
+    if (!collabEnabled || !collabConnected || !socket) return;
+    socket.emit('version:save', { leafletId: leafletIdRef.current, summary: 'Manuel gem', user: userRef.current });
+    setDirtySinceLastVersion(false);
+  }, [collabConnected, collabEnabled]);
+
+  const onRevertVersion = useCallback(
+    (versionId) => {
+      const socket = socketRef.current;
+      if (!collabEnabled || !collabConnected || !socket) return;
+      socket.emit('version:revert', { leafletId: leafletIdRef.current, versionId, user: userRef.current });
+      setDirtySinceLastVersion(false);
+    },
+    [collabConnected, collabEnabled]
+  );
 
   const downloadJson = (filename, data) => {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -884,6 +1603,27 @@ function App() {
             technicalView={technicalView}
             setTechnicalView={setTechnicalView}
             onResetLayout={resetLayoutForCurrentPage}
+            collabEnabled={collabEnabled}
+            collabToggleDisabled={collabEnvOverride !== null}
+            onToggleCollabEnabled={toggleCollabEnabled}
+            collabConnected={collabConnected}
+            collabUsers={collabUsers}
+            leafletStatus={leafletStatus}
+            onSetLeafletStatus={onSetLeafletStatus}
+            notifications={notifications}
+            notificationsUnread={notificationsUnread}
+            onMarkNotificationsRead={onMarkNotificationsRead}
+            onOpenVersions={onOpenVersions}
+            proofingEnabled={proofingEnabled}
+            setProofingEnabled={setProofingEnabled}
+            proofingUnavailableReason={spellcheckerError}
+            proofingIssueCount={proofing.issues.length}
+            offerIdOptions={offerAndGroupIndex.offerOptions}
+            selectedOfferId={offerIdFilter}
+            onSelectOfferId={handleSelectOfferId}
+            purchasingGroupOptions={offerAndGroupIndex.groupOptions}
+            selectedPurchasingGroup={purchasingGroupFilter}
+            onSelectPurchasingGroup={handleSelectPurchasingGroup}
           />
         )}
 
@@ -928,6 +1668,13 @@ function App() {
               fileInfo={fileInfo}
               layoutByAreaId={layoutByAreaId}
               onLayoutChange={handleLayoutChange}
+              commentsByOfferId={commentsByOfferId}
+              onOpenComments={onOpenComments}
+              offerFilter={offerFilterFn}
+              focusedOfferId={focusedOfferId}
+              scrollToPageRequest={scrollToPageRequest}
+              proofingByOfferId={proofing.byOfferId}
+              proofingEnabled={proofingEnabled}
             />
           )}
         </div>
@@ -953,7 +1700,73 @@ function App() {
           setSearchTerm={setSearchTerm}
           searchResults={searchResults}
           onSelectSearchResult={(r) => goToPage(r.pageIndex)}
+          proofingEnabled={proofingEnabled}
+          proofingIssueCount={proofing.issues.length}
+          proofingIssues={proofing.issues}
+          onSelectProofingIssue={handleSelectProofingIssue}
         />
+
+        <CommentsDrawer
+          open={commentsOpen}
+          onClose={() => setCommentsOpen(false)}
+          offerTitle={currentCommentsOffer?.headline || currentCommentsOffer?.name || ''}
+          offerId={commentsContext?.offerId}
+          pageIndex={typeof commentsContext?.areaIndex === 'number' ? commentsContext.areaIndex : null}
+          comments={currentCommentsList}
+          onAddComment={onAddComment}
+        />
+
+        <VersionsDrawer
+          open={versionsOpen}
+          onClose={() => setVersionsOpen(false)}
+          versions={versions}
+          audit={audit}
+          onSaveNow={onSaveVersionNow}
+          onRevert={onRevertVersion}
+        />
+
+        <Dialog open={!!userDialogOpen} onClose={() => {}} maxWidth="xs" fullWidth>
+          <DialogTitle>Vælg bruger</DialogTitle>
+          <DialogContent>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+              <TextField
+                label="Navn"
+                value={draftUserName}
+                onChange={(e) => setDraftUserName(e.target.value)}
+                autoFocus
+              />
+              <TextField
+                label="Email (valgfri)"
+                value={draftUserEmail}
+                onChange={(e) => setDraftUserEmail(e.target.value)}
+              />
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button
+              variant="contained"
+              disabled={!String(draftUserName || '').trim()}
+              onClick={() => {
+                const next = saveUser({ name: draftUserName, email: draftUserEmail });
+                setUser(next);
+                setUserDialogOpen(false);
+              }}
+            >
+              Fortsæt
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Snackbar
+          open={!!toast}
+          autoHideDuration={4000}
+          onClose={() => setToast(null)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        >
+          <Alert onClose={() => setToast(null)} severity={toast?.severity || 'info'} sx={{ width: '100%' }}>
+            {toast?.message || ''}
+          </Alert>
+        </Snackbar>
       </div>
     </ThemeProvider>
   );
