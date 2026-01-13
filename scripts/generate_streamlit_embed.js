@@ -89,12 +89,12 @@ function inlineBuild({ buildDir, outFile }) {
 
   out = out.replace(
     /<\/head>/i,
-    `\n<style>\n${inlineCss}\n</style>\n</head>`
+    () => `\n<style>\n${inlineCss}\n</style>\n</head>`
   );
 
   out = out.replace(
     /<\/body>/i,
-    `\n${inlineJsTags}\n</body>`
+    () => `\n${inlineJsTags}\n</body>`
   );
 
   // Remove CRA noscript message: Streamlit runs with JS in iframe.
