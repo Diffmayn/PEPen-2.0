@@ -1456,18 +1456,30 @@ function App() {
       const normalizeBase = (b) => String(b || '').replace(/\/+$/, '');
       const sampleBaseCandidates = [normalizeBase(injectedBase), defaultRawBase].filter(Boolean);
 
-      const fetchText = async (url) => {
-        const res = await fetch(url, { cache: 'no-store' });
-        if (!res.ok) throw new Error(`HTTP ${res.status} ved hentning af ${url}`);
-        return await res.text();
+      const looksLikeRootTag = (xmlText, rootTag) => {
+        const t = String(xmlText || '').trim();
+        if (!t) return false;
+        if (!t.startsWith('<')) return false;
+        const re = new RegExp(`<\\s*(?:\\w+:)?${rootTag}\\b`, 'i');
+        return re.test(t);
       };
 
-      const fetchFirstOk = async (urls) => {
+      const fetchText = async (url, rootTag) => {
+        const res = await fetch(url, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status} ved hentning af ${url}`);
+        const txt = await res.text();
+        if (rootTag && !looksLikeRootTag(txt, rootTag)) {
+          throw new Error(`Ugyldigt XML-indhold fra ${url}`);
+        }
+        return txt;
+      };
+
+      const fetchFirstOk = async (urls, rootTag) => {
         let lastErr = null;
         for (const url of urls) {
           if (!url) continue;
           try {
-            return await fetchText(url);
+            return await fetchText(url, rootTag);
           } catch (e) {
             lastErr = e;
           }
@@ -1479,13 +1491,13 @@ function App() {
         iprText = await fetchFirstOk([
           withPublicBase('/sample-xml/PMR_A0626052_IPR.xml'),
           ...sampleBaseCandidates.map((b) => `${b}/PMR_A0626052_IPR.xml`),
-        ]);
+        ], 'ImageProductionRequest');
       }
       if (!leafletText) {
         leafletText = await fetchFirstOk([
           withPublicBase('/sample-xml/PMR_A0626052_Leaflet.xml'),
           ...sampleBaseCandidates.map((b) => `${b}/PMR_A0626052_Leaflet.xml`),
-        ]);
+        ], 'LeafletRequest');
       }
 
       const iprFile = new File([iprText], 'PMR_A0626052_IPR.xml', { type: 'application/xml' });
