@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Drawer,
   Box,
@@ -8,11 +8,10 @@ import {
   ListItem,
   ListItemText,
   Button,
+  TextField,
 } from '@mui/material';
 
-import { MentionsInput, Mention } from 'react-mentions';
-import { dedupeStrings, extractMentionEmailsFromMarkup, extractRawAtEmailTokens, fetchEmailSuggestionsPOC, isCompanyEmail } from '../utils/mentions';
-import './CommentsMentions.css';
+import { dedupeStrings, isCompanyEmail } from '../utils/mentions';
 
 function formatTs(iso) {
   const d = iso ? new Date(iso) : null;
@@ -36,7 +35,6 @@ export default function CommentsDrawer({
 }) {
   const [text, setText] = useState('');
   const [validationError, setValidationError] = useState('');
-  const suggestTimerRef = useRef(null);
 
   const title = useMemo(() => {
     const pageLabel = typeof pageIndex === 'number' ? `Side ${pageIndex + 1}` : '';
@@ -83,35 +81,21 @@ export default function CommentsDrawer({
     if (!t) return;
     if (!offerId) return;
 
-    const mentionIds = extractMentionEmailsFromMarkup(t);
-    const mentionEmails = dedupeStrings(mentionIds).filter((e) => isCompanyEmail(e));
-
-    // Warn if user typed @something@company.dk without selecting a suggestion.
-    const rawTokens = dedupeStrings(extractRawAtEmailTokens(t)).filter((e) => isCompanyEmail(e));
-    const rawLower = new Set(rawTokens.map((e) => e.toLowerCase()));
-    mentionEmails.forEach((e) => rawLower.delete(String(e).toLowerCase()));
-    const invalid = Array.from(rawLower.values());
-    if (invalid.length) {
-      setValidationError(`Ugyldig tag: ${invalid.slice(0, 2).join(', ')}. Vælg fra listen.`);
-      return;
+    // Simple regex to extract @email patterns from plain text
+    const emailPattern = /@([a-zA-Z0-9._+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
+    const matches = [];
+    let match;
+    while ((match = emailPattern.exec(t))) {
+      matches.push(match[1]);
     }
+    
+    const mentionEmails = dedupeStrings(matches).filter((e) => isCompanyEmail(e));
 
     setValidationError('');
     if (typeof onAddComment === 'function') {
       onAddComment(offerId, { text: t, mentions: mentionEmails, offerTitle: offerTitle || '' }, pageIndex);
       setText('');
     }
-  };
-
-  const loadEmailSuggestions = (search, callback) => {
-    const q = String(search || '').trim();
-    if (suggestTimerRef.current) {
-      clearTimeout(suggestTimerRef.current);
-    }
-    suggestTimerRef.current = setTimeout(async () => {
-      const items = await fetchEmailSuggestionsPOC(q, { limit: 12 });
-      callback(items);
-    }, 150);
   };
 
   return (
@@ -180,45 +164,29 @@ export default function CommentsDrawer({
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
             Tag kollega: skriv @email
           </Typography>
-          <MentionsInput
+          <TextField
+            multiline
+            fullWidth
+            minRows={3}
+            maxRows={8}
             value={text}
-            onChange={(_e, newValue) => setText(newValue)}
-            className="pepen-mentions"
-            classNames={{
-              control: 'pepen-mentions__control',
-              highlighter: 'pepen-mentions__highlighter',
-              input: 'pepen-mentions__input',
-              suggestions: 'pepen-mentions__suggestions',
-              suggestionsList: 'pepen-mentions__suggestions__list',
-              suggestion: 'pepen-mentions__suggestions__item',
-              suggestionFocused: 'pepen-mentions__suggestions__item--focused',
-            }}
-            placeholder="Skriv en kommentar…"
-            a11ySuggestionsListLabel="Email forslag"
-            allowSuggestionsAboveCursor
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Skriv en kommentar… (brug @ for at tagge kollega)"
+            variant="outlined"
             onKeyDown={(e) => {
               if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                 e.preventDefault();
                 submit();
               }
             }}
-          >
-            <Mention
-              trigger="@"
-              data={loadEmailSuggestions}
-              className="pepen-mention"
-              displayTransform={(id) => `@${id}`}
-              markup="@[__display__](__id__)"
-              appendSpaceOnAdd
-            />
-          </MentionsInput>
+          />
           {validationError ? (
             <Typography variant="caption" color="error" sx={{ display: 'block', mt: 0.5 }}>
               {validationError}
             </Typography>
           ) : (
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-              Tip: Brug Ctrl+Enter for at sende.
+              Tip: Brug Ctrl+Enter for at sende. Skriv @email for at tagge.
             </Typography>
           )}
         </Box>

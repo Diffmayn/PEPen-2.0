@@ -1,6 +1,6 @@
 .pepen-mentions {
-  font-size: 12px;
-  line-height: 1.3;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 .pepen-mentions__control {
@@ -13,24 +13,17 @@
 }
 
 .pepen-mentions__highlighter {
-  padding: 14px 14px 10px 14px;
-  color: transparent;
-  white-space: pre-wrap;
-  overflow-wrap: break-word;
-  pointer-events: none;
-  box-sizing: border-box;
+  padding: 14px;
+  border: 1px solid transparent !important;
+  overflow: hidden !important;
 }
 
 .pepen-mentions__input {
-  padding: 14px 14px 10px 14px;
+  padding: 14px;
   outline: none;
-  border-radius: 4px;
-  color: rgba(0, 0, 0, 0.87);
-  white-space: pre-wrap;
-  overflow-wrap: break-word;
-  resize: vertical;
-  min-height: 56px;
-  box-sizing: border-box;
+  border: 1px solid transparent !important;
+  color: rgba(0, 0, 0, 0.87) !important;
+  background: transparent !important;
 }
 
 .pepen-mentions__suggestions {
