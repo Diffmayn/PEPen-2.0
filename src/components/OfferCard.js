@@ -83,7 +83,7 @@ function highlightWithProofing(text, term, misspellings, keyPrefix = '') {
   return out;
 }
 
-function OfferCard({ offer, blockId, editMode, onClick, isSelected, areaIndex, blockIndex, onOfferUpdate, highlightTerm, proofingEnabled = false, proofing = null, layoutSize = 'standard', onSetLayoutSize, commentCount = 0, onOpenComments }) {
+function OfferCard({ offer, blockId, blockPriority, editMode, onClick, isSelected, areaIndex, blockIndex, onOfferUpdate, highlightTerm, proofingEnabled = false, proofing = null, layoutSize = 'standard', onSetLayoutSize, commentCount = 0, onOpenComments }) {
   const [imageError, setImageError] = useState(false);
   const [primaryImageIndex, setPrimaryImageIndex] = useState(0);
   const [layoutMenuAnchor, setLayoutMenuAnchor] = useState(null);
@@ -97,6 +97,14 @@ function OfferCard({ offer, blockId, editMode, onClick, isSelected, areaIndex, b
   const buyQuantityText = useMemo(() => String(offer.buyQuantity || '').trim(), [offer.buyQuantity]);
   const salesConditionText = useMemo(() => String(offer.salesCondition || '').trim(), [offer.salesCondition]);
   const salesPriceText = useMemo(() => String(offer.salesPriceText || '').trim(), [offer.salesPriceText]);
+
+  const isPriority3 = useMemo(() => {
+    const v = String(blockPriority ?? '').trim();
+    if (!v) return false;
+    const m = v.match(/\d+/);
+    const n = m ? Number.parseInt(m[0], 10) : Number.NaN;
+    return Number.isFinite(n) ? n === 3 : v === '3';
+  }, [blockPriority]);
 
   const quantityLabel = useMemo(() => {
     const qty = String(buyQuantityText || '').trim();
@@ -415,9 +423,9 @@ function OfferCard({ offer, blockId, editMode, onClick, isSelected, areaIndex, b
                 {offer.price ? (
                   <Typography
                     variant="h4"
-                    color="secondary"
+                    color={isPriority3 ? 'text.primary' : 'secondary'}
                     className="offer-price"
-                    sx={{ fontWeight: 900, lineHeight: 1.05 }}
+                    sx={{ fontWeight: isPriority3 ? 400 : 900, lineHeight: 1.05 }}
                   >
                     {highlightText(offer.price, highlightTerm)}
                   </Typography>

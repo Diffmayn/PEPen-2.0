@@ -198,9 +198,12 @@ function App() {
   const [audit, setAudit] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [notificationsUnread, setNotificationsUnread] = useState(0);
+  const [mentionsInbox, setMentionsInbox] = useState([]);
+  const [mentionsUnread, setMentionsUnread] = useState(0);
   const [toast, setToast] = useState(null);
 
   const [versionsOpen, setVersionsOpen] = useState(false);
+  const [versionsInitialTab, setVersionsInitialTab] = useState(0);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [commentsContext, setCommentsContext] = useState(null);
 
@@ -820,6 +823,23 @@ function App() {
       setNotificationsUnread((n) => n + 1);
     });
 
+    socket.on('mentions:list', (payload) => {
+      if (!payload || String(payload.leafletId || '') !== String(leafletIdRef.current || '')) return;
+      const items = Array.isArray(payload.items) ? payload.items : [];
+      setMentionsInbox(items.slice(0, 200));
+    });
+
+    socket.on('mention:new', (payload) => {
+      if (!payload || String(payload.leafletId || '') !== String(leafletIdRef.current || '')) return;
+      const entry = payload.entry;
+      if (!entry) return;
+      setMentionsInbox((prev) => [entry, ...(prev || [])].slice(0, 200));
+      setMentionsUnread((n) => n + 1);
+      const from = entry.fromUser?.name ? entry.fromUser.name : 'en kollega';
+      const where = entry.offerTitle ? ` på "${entry.offerTitle}"` : '';
+      setToast({ severity: 'info', message: `Du blev tagget af ${from}${where}.` });
+    });
+
     return () => {
       try {
         socket.off('connect', onConnect);
@@ -877,9 +897,19 @@ function App() {
       if (!areaId) return;
       if (!nextLayout || typeof nextLayout !== 'object') return;
 
+      const sanitizePrinciple = (p) => {
+        if (!p || typeof p !== 'object') return null;
+        const id = String(p.id || '').trim();
+        if (!id) return null;
+        // Keep it simple: only allow #1-#5 + variant letter.
+        if (!/^([1-5])[a-z]$/i.test(id)) return null;
+        return { id: id.toLowerCase() };
+      };
+
       const sanitized = {
         order: Array.isArray(nextLayout.order) ? nextLayout.order : [],
         sizes: nextLayout.sizes && typeof nextLayout.sizes === 'object' ? nextLayout.sizes : {},
+        principle: sanitizePrinciple(nextLayout.principle),
       };
 
       setLayoutByAreaId((prev) => ({
@@ -1059,6 +1089,12 @@ function App() {
   }, []);
 
   const onOpenVersions = useCallback(() => {
+    setVersionsInitialTab(0);
+    setVersionsOpen(true);
+  }, []);
+
+  const onOpenMentions = useCallback(() => {
+    setVersionsInitialTab(2);
     setVersionsOpen(true);
   }, []);
 
@@ -1083,10 +1119,16 @@ function App() {
   }, [commentsByOfferId, commentsContext?.offerId]);
 
   const onAddComment = useCallback(
-    (offerId, text, pageIndex) => {
+    (offerId, textOrPayload, pageIndex) => {
       const id = String(offerId || '').trim();
-      const t = String(text || '').trim();
+      const payload = typeof textOrPayload === 'object' && textOrPayload
+        ? textOrPayload
+        : { text: textOrPayload };
+      const t = String(payload.text || '').trim();
       if (!id || !t) return;
+
+      const mentions = Array.isArray(payload.mentions) ? payload.mentions : [];
+      const offerTitle = String(payload.offerTitle || '').trim();
 
       const localComment = {
         id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
@@ -1095,6 +1137,8 @@ function App() {
         pageIndex: typeof pageIndex === 'number' ? pageIndex : null,
         user: userRef.current,
         text: t,
+        mentions,
+        offerTitle: offerTitle || null,
       };
 
       setCommentsByOfferId((prev) => {
@@ -1114,13 +1158,27 @@ function App() {
           offerId: id,
           text: t,
           pageIndex: typeof pageIndex === 'number' ? pageIndex : null,
+          offerTitle: offerTitle || null,
+          mentions,
           clientId,
           user: userRef.current,
         });
       }
+
+      if (mentions && mentions.length) {
+        // POC: simulate notification confirmation for the author.
+        // eslint-disable-next-line no-console
+        console.log('[mentions] notify', { offerId: id, mentions, offerTitle });
+        const display = mentions.slice(0, 3).map((e) => `@${e}`).join(', ');
+        setToast({ severity: 'success', message: `Notifieret: ${display}${mentions.length > 3 ? '…' : ''}` });
+      }
     },
     [clientId, collabConnected, collabEnabled]
   );
+
+  const onMarkMentionsRead = useCallback(() => {
+    setMentionsUnread(0);
+  }, []);
 
   const onSaveVersionNow = useCallback(() => {
     const socket = socketRef.current;
@@ -1693,6 +1751,8 @@ function App() {
             notificationsUnread={notificationsUnread}
             onMarkNotificationsRead={onMarkNotificationsRead}
             onOpenVersions={onOpenVersions}
+            mentionsUnread={mentionsUnread}
+            onOpenMentions={onOpenMentions}
             proofingEnabled={proofingEnabled}
             setProofingEnabled={setProofingEnabled}
             proofingUnavailableReason={spellcheckerError}
@@ -1794,6 +1854,7 @@ function App() {
           pageIndex={typeof commentsContext?.areaIndex === 'number' ? commentsContext.areaIndex : null}
           comments={currentCommentsList}
           onAddComment={onAddComment}
+          currentUserEmail={user?.email || ''}
         />
 
         <VersionsDrawer
@@ -1801,6 +1862,9 @@ function App() {
           onClose={() => setVersionsOpen(false)}
           versions={versions}
           audit={audit}
+          mentions={mentionsInbox}
+          initialTab={versionsInitialTab}
+          onMarkMentionsRead={onMarkMentionsRead}
           onSaveNow={onSaveVersionNow}
           onRevert={onRevertVersion}
         />

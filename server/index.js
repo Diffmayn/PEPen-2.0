@@ -6,12 +6,58 @@ const { Server } = require('socket.io');
 const PORT = process.env.PORT ? Number(process.env.PORT) : 4000;
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:3000';
 
+const EXCHANGE_ENABLED = String(process.env.EXCHANGE_ENABLED || '').trim().toLowerCase() === 'true'
+  || String(process.env.EXCHANGE_ENABLED || '').trim() === '1';
+
+// POC: hardcoded directory. Go-live: replace with Exchange/Graph directory search.
+const MOCK_EMAILS = [
+  'rene@example.dk',
+  'colleague1@company.dk',
+  'colleague2@company.dk',
+  'anne.hansen@company.dk',
+  'mikkel.nielsen@company.dk',
+  'søren@company.dk',
+  'jørgen@company.dk',
+  'line.pedersen@company.dk',
+  'marketing.team@company.dk',
+  'qa.proof@company.dk',
+];
+
+const COMPANY_EMAIL_DOMAINS = ['company.dk', 'example.dk'];
+
 function nowIso() {
   return new Date().toISOString();
 }
 
 function safeString(s) {
   return String(s || '').trim();
+}
+
+function isCompanyEmail(email) {
+  const e = safeString(email).toLowerCase();
+  const at = e.lastIndexOf('@');
+  if (at < 0) return false;
+  const domain = e.slice(at + 1);
+  return COMPANY_EMAIL_DOMAINS.includes(domain);
+}
+
+function normalizeForSearch(raw) {
+  const s = safeString(raw).toLowerCase();
+  if (!s) return '';
+  // Strip accents and do Danish-friendly folding.
+  return s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/æ/g, 'ae')
+    .replace(/ø/g, 'o')
+    .replace(/å/g, 'aa');
+}
+
+function fuzzyIncludes(haystack, needle) {
+  const h = normalizeForSearch(haystack);
+  const n = normalizeForSearch(needle);
+  if (!n) return true;
+  return h.includes(n);
 }
 
 function makeId() {
@@ -49,12 +95,30 @@ function ensureLeaflet(leafletId) {
       layoutByAreaId: {},
       status: 'draft',
       commentsByOfferId: {},
+      mentionsByEmail: {},
       versions: [],
       audit: [],
     });
   }
   if (!presence.has(id)) presence.set(id, new Map());
   return leaflets.get(id);
+}
+
+function getRoomPresence(leafletId) {
+  const id = normalizeLeafletId(leafletId);
+  return presence.get(id) || new Map();
+}
+
+function emitToEmailInRoom(ioServer, leafletId, email, event, payload) {
+  const wanted = safeString(email).toLowerCase();
+  if (!wanted) return;
+  const room = getRoomPresence(leafletId);
+  for (const [socketId, u] of room.entries()) {
+    const uEmail = safeString(u?.email).toLowerCase();
+    if (uEmail && uEmail === wanted) {
+      ioServer.to(socketId).emit(event, payload);
+    }
+  }
 }
 
 function addAudit(leafletId, entry) {
@@ -96,8 +160,28 @@ function getPresenceList(leafletId) {
 
 const app = express();
 app.use(cors({ origin: CLIENT_ORIGIN, credentials: true }));
+app.use(express.json({ limit: '2mb' }));
 app.get('/health', (req, res) => {
   res.json({ ok: true, at: nowIso() });
+});
+
+app.get('/api/suggest-emails', async (req, res) => {
+  const q = safeString(req.query?.q);
+  const rawLimit = Number(req.query?.limit);
+  const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(20, rawLimit)) : 10;
+
+  if (EXCHANGE_ENABLED) {
+    // Go-live stub: implement Microsoft Graph directory search here.
+    // For now, fall back to mock list.
+  }
+
+  const items = (MOCK_EMAILS || [])
+    .filter((e) => isCompanyEmail(e))
+    .filter((e) => fuzzyIncludes(e, q))
+    .slice(0, limit)
+    .map((email) => ({ id: email, display: email }));
+
+  res.json({ ok: true, items });
 });
 
 const server = http.createServer(app);
@@ -142,6 +226,15 @@ io.on('connection', (socket) => {
       });
     } else {
       socket.emit('doc:missing', { leafletId });
+    }
+
+    const userEmail = safeString(user?.email).toLowerCase();
+    if (userEmail) {
+      const inbox = store.mentionsByEmail?.[userEmail];
+      socket.emit('mentions:list', {
+        leafletId,
+        items: Array.isArray(inbox) ? inbox.slice(0, 100) : [],
+      });
     }
 
     addAudit(leafletId, {
@@ -285,6 +378,8 @@ io.on('connection', (socket) => {
       user: payload.user || null,
       text,
       parentId: payload.parentId || null,
+      mentions: Array.isArray(payload.mentions) ? payload.mentions.slice(0, 50) : [],
+      offerTitle: safeString(payload.offerTitle) || null,
     };
 
     const nextMap = { ...(store.commentsByOfferId || {}) };
@@ -298,6 +393,41 @@ io.on('connection', (socket) => {
     io.to(leafletId).emit('audit:entry', { leafletId, entry: store.audit[0] });
 
     io.to(leafletId).emit('comment:add', { leafletId, comment, clientId: payload.clientId || null });
+
+    const mentions = (Array.isArray(payload.mentions) ? payload.mentions : [])
+      .map((e) => safeString(e).toLowerCase())
+      .filter(Boolean)
+      .filter((e) => isCompanyEmail(e));
+
+    if (mentions.length) {
+      const unique = Array.from(new Set(mentions));
+      const fromUser = payload.user || null;
+      const snippet = text.length > 120 ? `${text.slice(0, 117)}...` : text;
+
+      for (const email of unique) {
+        const entry = {
+          id: makeId(),
+          at: nowIso(),
+          leafletId,
+          offerId,
+          offerTitle: safeString(payload.offerTitle) || null,
+          pageIndex: typeof payload.pageIndex === 'number' ? payload.pageIndex : null,
+          mentionedEmail: email,
+          fromUser,
+          commentId: comment.id,
+          commentSnippet: snippet,
+        };
+
+        const key = email.toLowerCase();
+        const map = store.mentionsByEmail || {};
+        const list = Array.isArray(map[key]) ? map[key].slice(0) : [];
+        list.unshift(entry);
+        if (list.length > 200) list.length = 200;
+        store.mentionsByEmail = { ...map, [key]: list };
+
+        emitToEmailInRoom(io, leafletId, email, 'mention:new', { leafletId, entry });
+      }
+    }
   });
 
   socket.on('version:save', (payload = {}) => {

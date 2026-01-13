@@ -2,6 +2,12 @@ import React, { useEffect, useMemo, useRef } from 'react';
 import { Box, Paper, Typography, Tooltip } from '@mui/material';
 import './PageThumbnails.css';
 
+function stripTrailingStaticDigits(name) {
+  const v = String(name || '').trim();
+  if (!v) return '';
+  return v.replace(/\s*-\s*\d{3}\s*$/u, '').trim();
+}
+
 function PageThumbnails({ areas, currentPage, onPageSelect, thumbnails, onRequestThumbnail }) {
   const itemRefs = useRef([]);
 
@@ -74,7 +80,7 @@ function PageThumbnails({ areas, currentPage, onPageSelect, thumbnails, onReques
                   Side {area.pageNumber}
                 </Typography>
                 <Typography variant="caption" className="page-name" noWrap>
-                  {area.name}
+                  {stripTrailingStaticDigits(area.name)}
                 </Typography>
               </Box>
             </Paper>

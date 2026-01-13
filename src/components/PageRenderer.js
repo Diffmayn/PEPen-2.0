@@ -1,7 +1,15 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { Paper, Box, Typography, Chip } from '@mui/material';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Paper, Box, Typography, Chip, Button, MenuItem, Select, Tooltip } from '@mui/material';
 import OfferCard from './OfferCard';
 import './PageRenderer.css';
+
+import {
+  applyPrincipleToArea,
+  formatPrincipleLabel,
+  getAutoPrincipleForArea,
+  listPrincipleOptions,
+  validatePrincipleSelection,
+} from '../utils/principles';
 
 function formatAreaSubtitle(name) {
   const v = String(name || '').trim();
@@ -9,6 +17,13 @@ function formatAreaSubtitle(name) {
   const parts = v.split('-').map(s => s.trim()).filter(Boolean);
   if (parts.length >= 2) return parts.slice(1).join(' · ');
   return v;
+}
+
+function stripTrailingStaticDigits(name) {
+  const v = String(name || '').trim();
+  if (!v) return '';
+  // Some sources append a static numeric suffix (e.g. "- 001"). Hide it in UI.
+  return v.replace(/\s*-\s*\d{3}\s*$/u, '').trim();
 }
 
 function formatValidityLabel(meta) {
@@ -40,13 +55,38 @@ function stableBlockKey(block, blockIndex) {
   return id ? id : `idx-${blockIndex}`;
 }
 
-function PageRenderer({ area, areaIndex, zoom, editMode, onOfferClick, selectedOfferId, onOfferUpdate, metadata, highlightTerm, highlightEnabled = false, mobile = false, layout, onLayoutChange, commentsByOfferId, onOpenComments, offerFilter, proofingByOfferId, proofingEnabled }) {
+function PageRenderer({ area, areaIndex, totalPages, viewMode, zoom, editMode, onOfferClick, selectedOfferId, onOfferUpdate, metadata, highlightTerm, highlightEnabled = false, mobile = false, layout, onLayoutChange, commentsByOfferId, onOpenComments, offerFilter, proofingByOfferId, proofingEnabled }) {
   const [dragKey, setDragKey] = useState(null);
   const [overKey, setOverKey] = useState(null);
+  const [selectedPrincipleId, setSelectedPrincipleId] = useState('');
+
+  useEffect(() => {
+    setSelectedPrincipleId('');
+  }, [area?.id]);
 
   const blocks = useMemo(
     () => ((area?.blocks || []).map((block, blockIndex) => ({ block, blockIndex, key: stableBlockKey(block, blockIndex) }))),
     [area]
+  );
+
+  const principleOptions = useMemo(() => listPrincipleOptions(), []);
+
+  const autoPrincipleId = useMemo(
+    () => getAutoPrincipleForArea({ area, areaIndex, totalPages }),
+    [area, areaIndex, totalPages]
+  );
+
+  const effectivePrincipleId = useMemo(() => {
+    const fromLayout = String(layout?.principle?.id || '').trim();
+    if (fromLayout) return fromLayout;
+    const fromPicker = String(selectedPrincipleId || '').trim();
+    if (fromPicker) return fromPicker;
+    return String(autoPrincipleId || '').trim();
+  }, [autoPrincipleId, layout?.principle?.id, selectedPrincipleId]);
+
+  const principleWarning = useMemo(
+    () => validatePrincipleSelection({ principleId: effectivePrincipleId, area, areaIndex, totalPages, viewMode }),
+    [area, areaIndex, effectivePrincipleId, totalPages, viewMode]
   );
 
   const offerCount = useMemo(
@@ -113,8 +153,9 @@ function PageRenderer({ area, areaIndex, zoom, editMode, onOfferClick, selectedO
     emitLayout({
       order: nextOrder,
       sizes: layout?.sizes || {},
+      principle: layout?.principle || null,
     });
-  }, [dragKey, editMode, emitLayout, layout?.sizes, orderedBlocks]);
+  }, [dragKey, editMode, emitLayout, layout?.principle, layout?.sizes, orderedBlocks]);
 
   const handleSetSize = useCallback((key, size) => {
     if (!editMode) return;
@@ -123,8 +164,9 @@ function PageRenderer({ area, areaIndex, zoom, editMode, onOfferClick, selectedO
     emitLayout({
       order: (Array.isArray(layout?.order) && layout.order.length) ? layout.order : orderedBlocks.map((b) => b.key),
       sizes: nextSizes,
+      principle: layout?.principle || null,
     });
-  }, [editMode, emitLayout, layout?.order, layout?.sizes, orderedBlocks]);
+  }, [editMode, emitLayout, layout?.order, layout?.principle, layout?.sizes, orderedBlocks]);
 
   if (!area) {
     return (
@@ -133,6 +175,8 @@ function PageRenderer({ area, areaIndex, zoom, editMode, onOfferClick, selectedO
       </Paper>
     );
   }
+
+  const displayAreaName = stripTrailingStaticDigits(area.name);
 
   return (
     <Paper className={`page-renderer ${mobile ? 'mobile' : ''}`}>
@@ -145,11 +189,17 @@ function PageRenderer({ area, areaIndex, zoom, editMode, onOfferClick, selectedO
             </Typography>
           </Box>
           <Typography variant="h6" component="h2" className="page-title">
-            {area.name}
+            {displayAreaName}
           </Typography>
-          {formatAreaSubtitle(area.name) ? (
+          {formatAreaSubtitle(displayAreaName) ? (
             <Typography variant="caption" className="page-subtitle">
-              {formatAreaSubtitle(area.name)}
+              {formatAreaSubtitle(displayAreaName)}
+            </Typography>
+          ) : null}
+
+          {principleWarning ? (
+            <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'error.main', fontWeight: 700 }}>
+              {principleWarning}
             </Typography>
           ) : null}
         </Box>
@@ -158,6 +208,55 @@ function PageRenderer({ area, areaIndex, zoom, editMode, onOfferClick, selectedO
           <Typography variant="caption" className="validity">
             {formatValidityLabel(metadata)}
           </Typography>
+
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', justifyContent: 'flex-end', mt: 0.5, flexWrap: 'wrap' }}>
+            <Tooltip title="Vælg Princip (Føtex Principles v11)">
+              <Select
+                size="small"
+                value={String(layout?.principle?.id || selectedPrincipleId || '')}
+                displayEmpty
+                onChange={(e) => {
+                  const v = String(e.target.value || '');
+                  setSelectedPrincipleId(v);
+                  // If the user explicitly chooses Auto, clear persisted principle.
+                  if (v === '' && layout?.principle) {
+                    emitLayout({
+                      order: (Array.isArray(layout?.order) ? layout.order : []),
+                      sizes: (layout?.sizes && typeof layout.sizes === 'object') ? layout.sizes : {},
+                      principle: null,
+                    });
+                  }
+                }}
+                sx={{ minWidth: 220 }}
+                renderValue={(v) => {
+                  const id = String(v || '').trim();
+                  if (id) return formatPrincipleLabel(id);
+                  if (autoPrincipleId) return `Auto · ${formatPrincipleLabel(autoPrincipleId)}`;
+                  return 'Auto (anbefalet)';
+                }}
+              >
+                {principleOptions.map((opt) => (
+                  <MenuItem key={opt.id || 'auto'} value={opt.id}>
+                    {opt.id ? opt.label : (autoPrincipleId ? `Auto · ${formatPrincipleLabel(autoPrincipleId)}` : opt.label)}
+                  </MenuItem>
+                ))}
+              </Select>
+            </Tooltip>
+
+            <Button
+              size="small"
+              variant="outlined"
+              disabled={!editMode || !effectivePrincipleId}
+              onClick={() => {
+                const next = applyPrincipleToArea({ area, principleId: effectivePrincipleId });
+                emitLayout(next);
+                setSelectedPrincipleId('');
+              }}
+            >
+              Anvend
+            </Button>
+          </Box>
+
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', justifyContent: 'flex-end' }}>
             <Chip label={`Side ${area.pageNumber}`} size="small" color="primary" />
             <Chip label={`${offerCount} tilbud`} size="small" variant="outlined" />
@@ -230,6 +329,7 @@ function PageRenderer({ area, areaIndex, zoom, editMode, onOfferClick, selectedO
                     <OfferCard
                       offer={block.offer}
                       blockId={block.blockId}
+                      blockPriority={block.priority}
                       editMode={editMode}
                       onClick={() => onOfferClick(block.offer)}
                       isSelected={selectedOfferId && String(selectedOfferId) === String(block.offer.id)}

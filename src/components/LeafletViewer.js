@@ -18,6 +18,7 @@ function LeafletViewer({ data, viewMode, currentPage, setCurrentPage, zoom, edit
 
   const areas = useMemo(() => data?.areas ?? [], [data]);
   const hasAreas = areas.length > 0;
+  const totalPages = areas.length;
   const meta = data?.metadata || null;
 
   const handleOfferClick = (offer) => {
@@ -257,6 +258,8 @@ function LeafletViewer({ data, viewMode, currentPage, setCurrentPage, zoom, edit
           <PageRenderer
             area={area}
             areaIndex={index}
+            totalPages={totalPages}
+            viewMode={viewMode}
             zoom={zoom}
             editMode={editMode}
             onOfferClick={handleOfferClick}
@@ -282,6 +285,8 @@ function LeafletViewer({ data, viewMode, currentPage, setCurrentPage, zoom, edit
           <PageRenderer
             area={area}
             areaIndex={index}
+            totalPages={totalPages}
+            viewMode={viewMode}
             zoom={zoom}
             editMode={editMode}
             onOfferClick={handleOfferClick}
@@ -304,6 +309,8 @@ function LeafletViewer({ data, viewMode, currentPage, setCurrentPage, zoom, edit
       <PageRenderer
         area={area}
         areaIndex={index}
+        totalPages={totalPages}
+        viewMode={viewMode}
         zoom={zoom}
         editMode={editMode}
         onOfferClick={handleOfferClick}

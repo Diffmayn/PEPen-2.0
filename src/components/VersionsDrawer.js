@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Drawer,
   Box,
@@ -27,6 +27,9 @@ export default function VersionsDrawer({
   onClose,
   versions,
   audit,
+  mentions,
+  initialTab,
+  onMarkMentionsRead,
   onRevert,
   onSaveNow,
 }) {
@@ -34,9 +37,26 @@ export default function VersionsDrawer({
 
   const versionItems = useMemo(() => (Array.isArray(versions) ? versions : []), [versions]);
   const auditItems = useMemo(() => (Array.isArray(audit) ? audit : []), [audit]);
+  const mentionItems = useMemo(() => (Array.isArray(mentions) ? mentions : []), [mentions]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (typeof initialTab === 'number') setTab(initialTab);
+  }, [initialTab, open]);
+
+  useEffect(() => {
+    if (tab !== 2) return;
+    if (typeof onMarkMentionsRead === 'function') onMarkMentionsRead();
+  }, [onMarkMentionsRead, tab]);
 
   return (
-    <Drawer anchor="right" open={!!open} onClose={onClose} PaperProps={{ sx: { width: 480 } }}>
+    <Drawer
+      anchor="right"
+      open={!!open}
+      onClose={onClose}
+      sx={{ zIndex: 1401 }}
+      PaperProps={{ sx: { width: 480 } }}
+    >
       <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
         <Box>
           <Typography variant="h6" sx={{ fontWeight: 800 }}>
@@ -56,6 +76,7 @@ export default function VersionsDrawer({
       <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="fullWidth">
         <Tab label="Versioner" />
         <Tab label="Audit log" />
+        <Tab label="Mentions" />
       </Tabs>
 
       <Divider />
@@ -95,7 +116,7 @@ export default function VersionsDrawer({
               </List>
             )}
           </>
-        ) : (
+        ) : tab === 1 ? (
           <>
             {auditItems.length === 0 ? (
               <Typography variant="body2" color="text.secondary">
@@ -110,6 +131,36 @@ export default function VersionsDrawer({
                       secondary={
                         <Typography variant="caption" color="text.secondary">
                           {formatTs(a.at)} · {a.user?.name || 'System'}
+                        </Typography>
+                      }
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            )}
+          </>
+        ) : (
+          <>
+            {mentionItems.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                Ingen mentions endnu.
+              </Typography>
+            ) : (
+              <List dense>
+                {mentionItems.slice(0, 200).map((m) => (
+                  <ListItem key={m.id} alignItems="flex-start">
+                    <ListItemText
+                      primary={
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                          Du blev tagget af {m.fromUser?.name || 'Ukendt'}
+                          {m.offerTitle ? ` · ${m.offerTitle}` : ''}
+                        </Typography>
+                      }
+                      secondary={
+                        <Typography variant="caption" color="text.secondary">
+                          {formatTs(m.at)}
+                          {typeof m.pageIndex === 'number' ? ` · Side ${m.pageIndex + 1}` : ''}
+                          {m.commentSnippet ? ` · ${m.commentSnippet}` : ''}
                         </Typography>
                       }
                     />

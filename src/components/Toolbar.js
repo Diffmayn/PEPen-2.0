@@ -7,6 +7,7 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import NotificationsNoneIcon from '@mui/icons-material/NotificationsNone';
 import HistoryIcon from '@mui/icons-material/History';
+import AlternateEmailIcon from '@mui/icons-material/AlternateEmail';
 
 import { mapStatusLabel } from '../utils/collab';
 
@@ -30,6 +31,8 @@ function Toolbar({
   notificationsUnread,
   onMarkNotificationsRead,
   onOpenVersions,
+  mentionsUnread,
+  onOpenMentions,
   proofingEnabled,
   setProofingEnabled,
   proofingUnavailableReason,
@@ -284,6 +287,18 @@ function Toolbar({
                   <span>
                     <IconButton onClick={onOpenVersions} disabled={!collabConnected}>
                       <HistoryIcon />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              )}
+
+              {collabEnabled && (
+                <Tooltip title="Mentions">
+                  <span>
+                    <IconButton onClick={onOpenMentions} disabled={!collabConnected} aria-label="Mentions">
+                      <Badge color="secondary" badgeContent={mentionsUnread} invisible={!mentionsUnread}>
+                        <AlternateEmailIcon />
+                      </Badge>
                     </IconButton>
                   </span>
                 </Tooltip>

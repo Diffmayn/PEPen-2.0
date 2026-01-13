@@ -89,6 +89,69 @@ streamlit run streamlit_app.py
 - Backend:
   - `PORT=4000`
   - `CLIENT_ORIGIN=http://localhost:3000`
+  - `EXCHANGE_ENABLED=false` (POC uses hardcoded directory; go-live enables Exchange/Graph integration)
+
+## @Mentions (tag kollega via email) – POC
+
+Du kan tagge kollegaer i kommentarer ved at skrive `@` efterfulgt af en email. Når du vælger en email fra listen, bliver den indsat som et klikbart tag (pill-stil) og der bliver sendt en POC-notifikation.
+
+### Sådan tester du
+
+1. Start frontend: `npm start`
+2. Start collab server: `npm run server`
+3. Åbn kommentarer på et tilbud.
+4. Skriv f.eks. `@ren` og vælg `rene@example.dk` fra dropdown.
+5. Send kommentaren.
+
+**POC-adfærd**
+
+- Afsender får en toast: `Notifieret: @rene@example.dk` og en console log.
+- Modtager får real-time “mention” (Socket.io) og en toast: `Du blev tagget af ...`.
+- Mentions-inbox kan åbnes via `@`-ikonet i topbaren (fanen “Mentions”).
+
+### Konfiguration (POC)
+
+- Frontend email-liste/domæner: [src/config/mockEmailDirectory.js](src/config/mockEmailDirectory.js)
+- Backend mock directory + endpoint: [server/index.js](server/index.js) (`GET /api/suggest-emails?q=...&limit=12`)
+
+Der bliver kun foreslået “company” domæner (privacy/begrænsning af eksterne emails).
+
+## Go-live (Exchange/Outlook) – design note
+
+POC’en har et feature-flag: `EXCHANGE_ENABLED=true`. Når det slås til, er planen at erstatte mock directory-søgning med Microsoft Graph (anbefalet) eller EWS.
+
+**Anbefalet Graph approach**
+
+- Endpoint: behold `GET /api/suggest-emails`, men brug Graph directory search (prefix/fuzzy) med server-side auth.
+- Sikkerhed: kræv auth på API’et, rate-limit, og returnér maks 10–20 forslag (ingen fuld directory dump).
+- E-mails: valider at de findes i organisationens directory, og tillad kun firma-domæner.
+- Notifikationer: send mail via Graph (Mail.Send) med kontekst (tilbud, side, snippet, deep-link).
+
+Dette repo indeholder kun stubs for go-live (ingen credentials i kode).
+
+## Føtex Principles v11 (layout forslag) – POC
+
+Der er nu et simpelt “Princip”-lag baseret på [Føtex_principles_v11.pdf](F%C3%B8tex_principles_v11.pdf).
+
+**Hvad det gør (i første iteration)**
+
+- Per side kan du vælge **Vælg Princip** (fx `1a`, `2q`, `4c`) og trykke **Anvend**.
+- “Anvend” laver et konservativt auto-layout ved at:
+  - sortere tilbud efter `Block.priority` (lavest tal = højest prioritet)
+  - sætte nogle få blokke til `Fuld bredde` / `Halv bredde` afhængigt af princip-gruppe
+- Valgt princip gemmes sammen med layoutet i den samme `layoutByAreaId` struktur (real-time sync via Socket.io når collaboration er aktiv).
+
+**Auto (anbefalet)**
+
+- Hvis du ikke vælger et princip, foreslår UI’et automatisk:
+  - `1a` på første og sidste side
+  - `4a` hvis siden ser ud til at være ren tekstil (indkøbsgruppe `800/820/860`)
+
+Auto-forslaget bliver kun “skrevet” til layout, når du trykker **Anvend**.
+
+**Validering (advarsler)**
+
+- Hvis du vælger et princip som ikke passer til siden, vises en lille advarsel under sidens titel (fx “Princip #4 er kun til tekstilsider.”).
 
 ## 📁 Project Structure
 
