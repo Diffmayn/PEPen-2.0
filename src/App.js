@@ -218,7 +218,7 @@ function App() {
 
   const extractCampaignIdFromFilename = (filename) => {
     if (!filename) return null;
-    const match = String(filename).match(/\bL\d{4,}\b/i);
+    const match = String(filename).match(/\b[LA]\d{4,}\b/i);
     return match ? match[0].toUpperCase() : null;
   };
 
@@ -226,7 +226,7 @@ function App() {
 
   const extractEventIdFromFilename = (filename) => {
     if (!filename) return null;
-    const match = String(filename).match(/\bL\d{4,}\b/i);
+    const match = String(filename).match(/\b[LA]\d{4,}\b/i);
     return match ? match[0].toUpperCase() : null;
   };
 
@@ -1431,6 +1431,42 @@ function App() {
     }
   }, []);
 
+  const loadBundledEventA0626052 = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const eventId = 'A0626052';
+      const fromWindow =
+        typeof window !== 'undefined'
+          ? window.__PEPEN_BUNDLED_XML__?.events?.[eventId]
+          : null;
+
+      let iprText = fromWindow?.iprText ? String(fromWindow.iprText) : '';
+      let leafletText = fromWindow?.leafletText ? String(fromWindow.leafletText) : '';
+
+      const publicBase = String(process.env.PUBLIC_URL || '');
+      const withPublicBase = (p) => (publicBase ? `${publicBase}${p}` : p);
+
+      const fetchText = async (url) => {
+        const res = await fetch(url, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status} ved hentning af ${url}`);
+        return await res.text();
+      };
+
+      if (!iprText) iprText = await fetchText(withPublicBase('/sample-xml/PMR_A0626052_IPR.xml'));
+      if (!leafletText) leafletText = await fetchText(withPublicBase('/sample-xml/PMR_A0626052_Leaflet.xml'));
+
+      const iprFile = new File([iprText], 'PMR_A0626052_IPR.xml', { type: 'application/xml' });
+      const leafletFile = new File([leafletText], 'PMR_A0626052_Leaflet.xml', { type: 'application/xml' });
+      await loadPair(iprFile, leafletFile);
+    } catch (e) {
+      setError(`Kunne ikke indlæse demo A0626052: ${e?.message || e}`);
+    } finally {
+      setLoading(false);
+    }
+  }, [loadPair]);
+
   const pickDirectory = useCallback(async () => {
     if (!canPickDirectory) {
       setFolderStatus('Mappe-indlæsning understøttes ikke i denne browser.');
@@ -1631,6 +1667,7 @@ function App() {
           {!leafletData && !loading && (
             <FileUploader 
               onFilesUpload={handleFilesUpload}
+              onLoadBundledEventA0626052={loadBundledEventA0626052}
               error={error}
               canPickDirectory={canPickDirectory}
               onPickDirectory={pickDirectory}

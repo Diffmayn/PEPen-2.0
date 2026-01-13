@@ -10,6 +10,25 @@ function escapeHtmlCommentBreakers(s) {
   return String(s).replace(/<\//g, '<\\/');
 }
 
+function listFilesRecursive(dir) {
+  if (!fs.existsSync(dir)) return [];
+  const out = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...listFilesRecursive(p));
+    else out.push(p);
+  }
+  return out;
+}
+
+function normalizeSlashes(p) {
+  return String(p).replace(/\\/g, '/');
+}
+
+function stableSort(a, b) {
+  return String(a).localeCompare(String(b));
+}
+
 function inlineBuild({ buildDir, outFile }) {
   const indexPath = path.join(buildDir, 'index.html');
   if (!fs.existsSync(indexPath)) {
@@ -18,45 +37,55 @@ function inlineBuild({ buildDir, outFile }) {
 
   const html = readText(indexPath);
 
-  // Extract stylesheet hrefs and script srcs in-order.
-  // CRA build uses relative paths like /static/...
-  const linkRe = /<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"[^>]*>/gi;
-  const scriptRe = /<script[^>]+src="([^"]+)"[^>]*><\/script>/gi;
+  // Remove and inline CRA build assets.
+  // NOTE: Attribute order varies (e.g. href="..." rel="stylesheet"), so we avoid brittle capture regex.
+  const stylesheetLinkTagRe = /<link\b[^>]*rel=("|')stylesheet\1[^>]*>/gi;
+  const anyLinkTagRe = /<link\b[^>]*>/gi;
+  const scriptTagWithSrcRe = /<script\b[^>]*src=("|')([^"']+)\1[^>]*>\s*<\/script>/gi;
 
-  const cssHrefs = [];
-  const jsSrcs = [];
+  // Prefer reading the actual files on disk; this also captures code-split chunks.
+  const staticCssDir = path.join(buildDir, 'static', 'css');
+  const staticJsDir = path.join(buildDir, 'static', 'js');
 
-  let m;
-  while ((m = linkRe.exec(html)) !== null) cssHrefs.push(m[1]);
-  while ((m = scriptRe.exec(html)) !== null) jsSrcs.push(m[1]);
+  const cssFiles = listFilesRecursive(staticCssDir)
+    .filter((p) => p.toLowerCase().endsWith('.css') && !p.toLowerCase().endsWith('.css.map'))
+    .sort(stableSort);
 
-  const resolveAsset = (hrefOrSrc) => {
-    // build paths are rooted at build/
-    const cleaned = hrefOrSrc.replace(/^\//, '');
-    return path.join(buildDir, cleaned);
-  };
+  const jsFilesAll = listFilesRecursive(staticJsDir)
+    .filter((p) => p.toLowerCase().endsWith('.js') && !p.toLowerCase().endsWith('.js.map'))
+    .filter((p) => !p.toLowerCase().endsWith('.license.txt'))
+    .sort(stableSort);
 
-  const inlineCss = cssHrefs
-    .map((href) => {
-      const p = resolveAsset(href);
-      if (!fs.existsSync(p)) return `/* Missing CSS: ${href} */`;
-      return readText(p);
-    })
+  // Ensure main bundle runs last.
+  const mainJs = jsFilesAll.filter((p) => /\/main\.[a-f0-9]+\.js$/i.test(normalizeSlashes(p)));
+  const otherJs = jsFilesAll.filter((p) => !/\/main\.[a-f0-9]+\.js$/i.test(normalizeSlashes(p)));
+  const jsFiles = [...otherJs, ...mainJs];
+
+  const inlineCss = cssFiles
+    .map((p) => readText(p))
     .join('\n\n');
 
-  const inlineJs = jsSrcs
-    .map((src) => {
-      const p = resolveAsset(src);
-      if (!fs.existsSync(p)) return `console.warn(${JSON.stringify(`Missing JS: ${src}`)});`;
-      return readText(p);
+  const inlineJsTags = jsFiles
+    .map((p) => {
+      const js = escapeHtmlCommentBreakers(readText(p));
+      return `\n<script>\n${js}\n</script>\n`;
     })
-    .map(escapeHtmlCommentBreakers)
-    .join('\n\n');
+    .join('');
 
-  // Remove original stylesheet/script tags; inject inlined versions before </head> and </body>
+  // Remove original external assets.
+  // - Remove any <script src="..."> (CRA bundles)
+  // - Remove stylesheet <link ...>
+  // - Remove any remaining <link href="/static/..."> (icons/manifest) to avoid 404 spam
   let out = html
-    .replace(linkRe, '')
-    .replace(scriptRe, '');
+    .replace(scriptTagWithSrcRe, '')
+    .replace(stylesheetLinkTagRe, '')
+    .replace(anyLinkTagRe, (tag) => {
+      const href = (tag.match(/\bhref=("|')([^"']+)\1/i) || [])[2];
+      const rel = (tag.match(/\brel=("|')([^"']+)\1/i) || [])[2];
+      if (href && String(href).startsWith('/static/')) return '';
+      if (rel && String(rel).toLowerCase() === 'manifest') return '';
+      return tag;
+    });
 
   out = out.replace(
     /<\/head>/i,
@@ -65,7 +94,7 @@ function inlineBuild({ buildDir, outFile }) {
 
   out = out.replace(
     /<\/body>/i,
-    `\n<script>\n${inlineJs}\n</script>\n</body>`
+    `\n${inlineJsTags}\n</body>`
   );
 
   // Remove CRA noscript message: Streamlit runs with JS in iframe.
@@ -73,7 +102,7 @@ function inlineBuild({ buildDir, outFile }) {
 
   fs.mkdirSync(path.dirname(outFile), { recursive: true });
   fs.writeFileSync(outFile, out, 'utf8');
-  return { cssCount: cssHrefs.length, jsCount: jsSrcs.length };
+  return { cssCount: cssFiles.length, jsCount: jsFiles.length };
 }
 
 function main() {

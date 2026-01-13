@@ -6,6 +6,7 @@ import './FileUploader.css';
 
 function FileUploader({
   onFilesUpload,
+  onLoadBundledEventA0626052,
   error,
   canPickDirectory,
   onPickDirectory,
@@ -78,6 +79,18 @@ function FileUploader({
             Vælg filer
           </Button>
         </label>
+
+        <Box sx={{ mt: 1.5, display: 'flex', gap: 1, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <Button
+            variant="outlined"
+            disabled={typeof onLoadBundledEventA0626052 !== 'function'}
+            onClick={() => {
+              if (typeof onLoadBundledEventA0626052 === 'function') onLoadBundledEventA0626052();
+            }}
+          >
+            Indlæs demo: A0626052
+          </Button>
+        </Box>
 
         <Divider sx={{ my: 3 }} />
 
