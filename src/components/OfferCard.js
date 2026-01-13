@@ -201,8 +201,8 @@ function OfferCard({ offer, blockId, blockPriority, editMode, onClick, isSelecte
             placement="right"
             arrow
             enterDelay={150}
-            leaveDelay={150}
-            disableInteractive={false}
+            leaveDelay={0}
+            disableInteractive={true}
           >
             <CardMedia
               component="img"
@@ -262,8 +262,8 @@ function OfferCard({ offer, blockId, blockPriority, editMode, onClick, isSelecte
                 placement="right"
                 arrow
                 enterDelay={150}
-                leaveDelay={150}
-                disableInteractive={false}
+                leaveDelay={0}
+                disableInteractive={true}
               >
                 <Box
                   component="img"

@@ -1,5 +1,7 @@
-import React, { useEffect, useMemo, useRef } from 'react';
-import { Box, Paper, Typography, Tooltip } from '@mui/material';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Box, Paper, Typography, Tooltip, IconButton } from '@mui/material';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import './PageThumbnails.css';
 
 function stripTrailingStaticDigits(name) {
@@ -10,6 +12,8 @@ function stripTrailingStaticDigits(name) {
 
 function PageThumbnails({ areas, currentPage, onPageSelect, thumbnails, onRequestThumbnail }) {
   const itemRefs = useRef([]);
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const safeThumbs = useMemo(() => thumbnails || {}, [thumbnails]);
 
@@ -38,55 +42,85 @@ function PageThumbnails({ areas, currentPage, onPageSelect, thumbnails, onReques
   }, [areas.length, onRequestThumbnail, safeThumbs]);
 
   return (
-    <Box className="page-thumbnails">
-      <Typography variant="subtitle2" sx={{ p: 2, fontWeight: 'bold', color: '#666' }}>
-        Sider ({areas.length})
-      </Typography>
-      <Box className="thumbnails-grid">
-        {areas.map((area, index) => (
-          <Tooltip
-            key={area.id || index}
-            placement="right"
-            enterDelay={250}
-            title={
-              safeThumbs[index] ? (
-                <img
-                  src={safeThumbs[index]}
-                  alt={`Side ${area.pageNumber} preview`}
-                  style={{ width: 240, display: 'block' }}
-                />
-              ) : (
-                <Typography variant="caption">Preview indlæses...</Typography>
-              )
-            }
-          >
-            <Paper
-              className={`thumbnail ${currentPage === index ? 'active' : ''}`}
-              onClick={() => onPageSelect(index)}
-              ref={(el) => {
-                itemRefs.current[index] = el;
+    <Box className={`page-thumbnails ${isCollapsed ? 'collapsed' : ''} ${isExpanded ? 'expanded' : ''}`}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 2 }}>
+        {!isCollapsed && (
+          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#666' }}>
+            Sider ({areas.length})
+          </Typography>
+        )}
+        <Box sx={{ display: 'flex', gap: 0.5 }}>
+          {!isCollapsed && (
+            <Tooltip title={isExpanded ? "Normal størrelse" : "Udvid"}>
+              <IconButton 
+                size="small" 
+                onClick={() => setIsExpanded(!isExpanded)}
+                sx={{ ml: 'auto' }}
+              >
+                {isExpanded ? <ChevronRightIcon /> : <ChevronLeftIcon />}
+              </IconButton>
+            </Tooltip>
+          )}
+          <Tooltip title={isCollapsed ? "Vis sider" : "Skjul sider"}>
+            <IconButton 
+              size="small" 
+              onClick={() => {
+                setIsCollapsed(!isCollapsed);
+                if (!isCollapsed) setIsExpanded(false);
               }}
-              data-index={index}
             >
-              <Box className="thumb-image">
-                {safeThumbs[index] ? (
-                  <img src={safeThumbs[index]} alt={`Side ${area.pageNumber}`} loading="lazy" />
-                ) : (
-                  <Box className="thumb-placeholder" />
-                )}
-              </Box>
-              <Box className="thumbnail-meta">
-                <Typography variant="caption" className="page-number">
-                  Side {area.pageNumber}
-                </Typography>
-                <Typography variant="caption" className="page-name" noWrap>
-                  {stripTrailingStaticDigits(area.name)}
-                </Typography>
-              </Box>
-            </Paper>
+              {isCollapsed ? <ChevronRightIcon /> : <ChevronLeftIcon />}
+            </IconButton>
           </Tooltip>
-        ))}
+        </Box>
       </Box>
+      {!isCollapsed && (
+        <Box className="thumbnails-grid">
+          {areas.map((area, index) => (
+            <Tooltip
+              key={area.id || index}
+              placement="right"
+              enterDelay={250}
+              title={
+                safeThumbs[index] ? (
+                  <img
+                    src={safeThumbs[index]}
+                    alt={`Side ${area.pageNumber} preview`}
+                    style={{ width: 240, display: 'block' }}
+                  />
+                ) : (
+                  <Typography variant="caption">Preview indlæses...</Typography>
+                )
+              }
+            >
+              <Paper
+                className={`thumbnail ${currentPage === index ? 'active' : ''}`}
+                onClick={() => onPageSelect(index)}
+                ref={(el) => {
+                  itemRefs.current[index] = el;
+                }}
+                data-index={index}
+              >
+                <Box className="thumb-image">
+                  {safeThumbs[index] ? (
+                    <img src={safeThumbs[index]} alt={`Side ${area.pageNumber}`} loading="lazy" />
+                  ) : (
+                    <Box className="thumb-placeholder" />
+                  )}
+                </Box>
+                <Box className="thumbnail-meta">
+                  <Typography variant="caption" className="page-number">
+                    Side {area.pageNumber}
+                  </Typography>
+                  <Typography variant="caption" className="page-name" noWrap>
+                    {stripTrailingStaticDigits(area.name)}
+                  </Typography>
+                </Box>
+              </Paper>
+            </Tooltip>
+          ))}
+        </Box>
+      )}
     </Box>
   );
 }

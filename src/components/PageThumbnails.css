@@ -4,6 +4,21 @@
   border-right: 1px solid #ddd;
   overflow-y: auto;
   flex-shrink: 0;
+  transition: width 0.3s ease;
+  position: relative;
+}
+
+.page-thumbnails.collapsed {
+  width: 50px;
+  overflow: hidden;
+}
+
+.page-thumbnails.expanded {
+  width: 400px;
+}
+
+.page-thumbnails.expanded .thumbnails-grid {
+  grid-template-columns: repeat(3, 1fr);
 }
 
 .thumbnails-grid {

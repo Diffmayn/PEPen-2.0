@@ -79,6 +79,7 @@ const extractLeafletMetadata = (leafletJson) => {
 
   const validFrom = normalizeText(layout?.ValidityPeriod?.StartDate);
   const validTo = normalizeText(layout?.ValidityPeriod?.EndDate);
+  const salesOrgId = normalizeText(layout?.OrganisationalAssignment?.SalesOrganisationID);
 
   return {
     promotionEventId: normalizeText(layout?.PromotionEventID),
@@ -87,6 +88,7 @@ const extractLeafletMetadata = (leafletJson) => {
     campaignId: normalizeText(layout?.CampaignID),
     validFrom,
     validTo,
+    salesOrganisationId: salesOrgId,
   };
 };
 

@@ -8,10 +8,12 @@ import {
   ListItem,
   ListItemText,
   Button,
-  TextField,
 } from '@mui/material';
+import { MentionsInput, Mention } from 'react-mentions';
 
 import { dedupeStrings, isCompanyEmail } from '../utils/mentions';
+import { MOCK_EMAILS } from '../config/mockEmailDirectory';
+import './CommentsMentions.css';
 
 function formatTs(iso) {
   const d = iso ? new Date(iso) : null;
@@ -43,6 +45,17 @@ export default function CommentsDrawer({
   }, [offerId, offerTitle, pageIndex]);
 
   const items = Array.isArray(comments) ? comments : [];
+  
+  const mentionUsers = useMemo(() => {
+    return MOCK_EMAILS.map((email) => {
+      const namePart = email.split('@')[0];
+      const displayName = namePart
+        .split('.')
+        .map(s => s.charAt(0).toUpperCase() + s.slice(1))
+        .join(' ');
+      return { id: email, display: displayName };
+    });
+  }, []);
 
   const renderCommentText = (raw) => {
     const t = String(raw || '');
@@ -81,12 +94,21 @@ export default function CommentsDrawer({
     if (!t) return;
     if (!offerId) return;
 
-    // Simple regex to extract @email patterns from plain text
-    const emailPattern = /@([a-zA-Z0-9._+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
+    // Simple regex to extract @email from markdown-like mentions: @[Display](email)
+    // Also support raw emails if typed manually
+    const mentionRegex = /@\[[^\]]+\]\(([^)]+)\)/g;
     const matches = [];
     let match;
+    while ((match = mentionRegex.exec(t))) {
+        matches.push(match[1]);
+    }
+
+    // Also look for raw emails pattern just in case
+    const emailPattern = /([a-zA-Z0-9._+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
     while ((match = emailPattern.exec(t))) {
-      matches.push(match[1]);
+         // Avoid duplicates if it was part of the mention syntax
+         // The validation below should filter out junk
+         matches.push(match[1]);
     }
     
     const mentionEmails = dedupeStrings(matches).filter((e) => isCompanyEmail(e));
@@ -162,31 +184,57 @@ export default function CommentsDrawer({
       <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
         <Box>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-            Tag kollega: skriv @email
+            Tag kollega: skriv @navn
           </Typography>
-          <TextField
-            multiline
-            fullWidth
-            minRows={3}
-            maxRows={8}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="Skriv en kommentar… (brug @ for at tagge kollega)"
-            variant="outlined"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                e.preventDefault();
-                submit();
-              }
-            }}
-          />
+          
+          <div className="pepen-mentions-container">
+            <MentionsInput
+              value={text}
+              onChange={(event, newValue) => setText(newValue)}
+              placeholder="Skriv en kommentar... (brug @ for at tagge kollega)"
+              className="pepen-mentions"
+              classNames={{
+                control: 'pepen-mentions__control',
+                highlighter: 'pepen-mentions__highlighter',
+                input: 'pepen-mentions__input',
+              }}
+              a11ySuggestionsListLabel="Suggest mention"
+              markup="@[__display__](__id__)"
+              allowSpaceInQuery
+              onKeyDown={(e) => {
+                if (e.key === ' ') {
+                  // Ensure spacebar always inserts a space, even if a parent handler exists
+                  e.stopPropagation();
+                  return;
+                }
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                  e.preventDefault();
+                  submit();
+                }
+              }}
+            >
+              <Mention
+                trigger="@"
+                data={mentionUsers}
+                className="pepen-mentions__mention"
+                style={{ backgroundColor: '#e8f0fe' }}
+                renderSuggestion={(suggestion, search, highlightedDisplay) => (
+                  <div className={`pepen-mentions__suggestions__item ${highlightedDisplay ? 'pepen-mentions__suggestions__item--focused' : ''}`}>
+                    <strong>{suggestion.display}</strong>
+                    <div style={{ fontSize: '0.8em', color: '#666' }}>{suggestion.id}</div>
+                  </div>
+                )}
+              />
+            </MentionsInput>
+          </div>
+
           {validationError ? (
             <Typography variant="caption" color="error" sx={{ display: 'block', mt: 0.5 }}>
               {validationError}
             </Typography>
           ) : (
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-              Tip: Brug Ctrl+Enter for at sende. Skriv @email for at tagge.
+              Tip: Brug Ctrl+Enter for at sende.
             </Typography>
           )}
         </Box>

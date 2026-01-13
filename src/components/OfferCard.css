@@ -3,6 +3,15 @@
   transition: all 0.3s ease;
 }
 
+.offer-card.editable {
+  cursor: move;
+  cursor: grab;
+}
+
+.offer-card.editable:active {
+  cursor: grabbing;
+}
+
 .offer-media {
   border-radius: 8px;
   overflow: hidden;
@@ -35,6 +44,7 @@
 .offer-card.editable:hover {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
   transform: translateY(-2px);
+  border: 2px dashed #1976d2;
 }
 
 .offer-card.selected {

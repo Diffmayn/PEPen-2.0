@@ -177,16 +177,64 @@ function PageRenderer({ area, areaIndex, totalPages, viewMode, zoom, editMode, o
   }
 
   const displayAreaName = stripTrailingStaticDigits(area.name);
+  
+  // Determine brand based on SalesOrganisationID
+  const salesOrgId = String(metadata?.salesOrganisationId || '').trim();
+  const isBilka = salesOrgId === '0500';
+  const isFoetex = salesOrgId === '0200';
+  
+  // Brand colors
+  const brandColor = isBilka ? '#0051A0' : isFoetex ? '#000037' : '#1976d2'; // Bilka blue, Føtex Stratos, or default
+  const brandBgColor = isFoetex ? '#EEEDE8' : '#f5f5f5'; // Føtex Cararra or default
+  const brandName = isBilka ? 'Bilka' : isFoetex ? 'Føtex' : metadata?.promotionEventName || 'Leaflet';
 
   return (
-    <Paper className={`page-renderer ${mobile ? 'mobile' : ''}`}>
+    <Paper className={`page-renderer ${mobile ? 'mobile' : ''}`} sx={{ bgcolor: brandBgColor }}>
       <Box className="page-header">
         <Box className="page-header-left">
           <Box className="page-brand">
-            <Box className="brand-mark" aria-label="Bilka style" sx={{ bgcolor: 'primary.main' }} />
-            <Typography variant="subtitle2" className="brand-title" color="primary">
-              {metadata?.promotionEventName || 'Leaflet'}
-            </Typography>
+            {isBilka ? (
+              <>
+                <Typography 
+                  variant="h5" 
+                  sx={{ 
+                    fontWeight: 900, 
+                    color: brandColor,
+                    fontSize: '1.5rem',
+                    letterSpacing: '-0.5px'
+                  }}
+                >
+                  bilka
+                </Typography>
+                <Typography variant="subtitle2" sx={{ color: 'text.secondary', ml: 1 }}>
+                  {metadata?.promotionEventName || ''}
+                </Typography>
+              </>
+            ) : isFoetex ? (
+              <>
+                <Typography 
+                  variant="h5" 
+                  sx={{ 
+                    fontWeight: 900, 
+                    color: brandColor,
+                    fontSize: '1.5rem',
+                    letterSpacing: '-0.5px'
+                  }}
+                >
+                  føtex
+                </Typography>
+                <Typography variant="subtitle2" sx={{ color: 'text.secondary', ml: 1 }}>
+                  {metadata?.promotionEventName || ''}
+                </Typography>
+              </>
+            ) : (
+              <>
+                <Box className="brand-mark" aria-label="Brand style" sx={{ bgcolor: brandColor }} />
+                <Typography variant="subtitle2" className="brand-title" sx={{ color: brandColor }}>
+                  {brandName}
+                </Typography>
+              </>
+            )}
           </Box>
           <Typography variant="h6" component="h2" className="page-title">
             {displayAreaName}
@@ -209,56 +257,16 @@ function PageRenderer({ area, areaIndex, totalPages, viewMode, zoom, editMode, o
             {formatValidityLabel(metadata)}
           </Typography>
 
-          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', justifyContent: 'flex-end', mt: 0.5, flexWrap: 'wrap' }}>
-            <Tooltip title="Vælg Princip (Føtex Principles v11)">
-              <Select
-                size="small"
-                value={String(layout?.principle?.id || selectedPrincipleId || '')}
-                displayEmpty
-                onChange={(e) => {
-                  const v = String(e.target.value || '');
-                  setSelectedPrincipleId(v);
-                  // If the user explicitly chooses Auto, clear persisted principle.
-                  if (v === '' && layout?.principle) {
-                    emitLayout({
-                      order: (Array.isArray(layout?.order) ? layout.order : []),
-                      sizes: (layout?.sizes && typeof layout.sizes === 'object') ? layout.sizes : {},
-                      principle: null,
-                    });
-                  }
-                }}
-                sx={{ minWidth: 220 }}
-                renderValue={(v) => {
-                  const id = String(v || '').trim();
-                  if (id) return formatPrincipleLabel(id);
-                  if (autoPrincipleId) return `Auto · ${formatPrincipleLabel(autoPrincipleId)}`;
-                  return 'Auto (anbefalet)';
-                }}
-              >
-                {principleOptions.map((opt) => (
-                  <MenuItem key={opt.id || 'auto'} value={opt.id}>
-                    {opt.id ? opt.label : (autoPrincipleId ? `Auto · ${formatPrincipleLabel(autoPrincipleId)}` : opt.label)}
-                  </MenuItem>
-                ))}
-              </Select>
-            </Tooltip>
-
-            <Button
-              size="small"
-              variant="outlined"
-              disabled={!editMode || !effectivePrincipleId}
-              onClick={() => {
-                const next = applyPrincipleToArea({ area, principleId: effectivePrincipleId });
-                emitLayout(next);
-                setSelectedPrincipleId('');
-              }}
-            >
-              Anvend
-            </Button>
-          </Box>
-
-          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', justifyContent: 'flex-end' }}>
-            <Chip label={`Side ${area.pageNumber}`} size="small" color="primary" />
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', justifyContent: 'flex-end', mt: 0.5 }}>
+            <Chip 
+              label={`Side ${area.pageNumber}`} 
+              size="small" 
+              sx={{ 
+                bgcolor: brandColor, 
+                color: 'white',
+                fontWeight: 600
+              }} 
+            />
             <Chip label={`${offerCount} tilbud`} size="small" variant="outlined" />
           </Box>
         </Box>
@@ -273,7 +281,9 @@ function PageRenderer({ area, areaIndex, totalPages, viewMode, zoom, editMode, o
           </Box>
         ) : (
           <Box className="offers-grid" style={{ '--offer-cols': gridCols }}>
-            {orderedBlocks.map(({ block, blockIndex, key }, index) => {
+            {orderedBlocks
+              .filter(({ block }) => block.offer) // Only show blocks that have offers
+              .map(({ block, blockIndex, key }, index) => {
               const size = sizeForKey(key);
               const span = spanForSize(size);
               const isOver = overKey && overKey === key;
@@ -324,8 +334,7 @@ function PageRenderer({ area, areaIndex, totalPages, viewMode, zoom, editMode, o
                     setDragKey(null);
                   }}
                 >
-                  {block.offer ? (
-                    matchesFilter ? (
+                  {matchesFilter ? (
                     <OfferCard
                       offer={block.offer}
                       blockId={block.blockId}
@@ -352,11 +361,8 @@ function PageRenderer({ area, areaIndex, totalPages, viewMode, zoom, editMode, o
                       }
                       onOpenComments={onOpenComments}
                     />
-                    ) : (
-                      <PlaceholderCard label="Skjult af filter" />
-                    )
                   ) : (
-                    <PlaceholderCard />
+                    <PlaceholderCard label="Skjult af filter" />
                   )}
                 </div>
               );

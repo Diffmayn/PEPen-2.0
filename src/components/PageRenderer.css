@@ -101,15 +101,22 @@
 
 .offer-slot {
   min-width: 0;
+  transition: all 0.2s ease;
 }
 
 .offer-slot.editable {
   cursor: grab;
 }
 
+.offer-slot.editable:active {
+  cursor: grabbing;
+}
+
 .offer-slot.drag-over {
-  outline: 2px dashed rgba(0, 0, 0, 0.25);
+  outline: 3px dashed #1976d2;
   outline-offset: 4px;
+  background: rgba(25, 118, 210, 0.08);
+  border-radius: 8px;
 }
 
 .offer-placeholder {
