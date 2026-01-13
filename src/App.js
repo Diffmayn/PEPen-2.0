@@ -1448,14 +1448,45 @@ function App() {
       const publicBase = String(process.env.PUBLIC_URL || '');
       const withPublicBase = (p) => (publicBase ? `${publicBase}${p}` : p);
 
+      const injectedBase = typeof window !== 'undefined'
+        ? String(window.__PEPEN_SAMPLE_BASE_URL__ || '')
+        : '';
+
+      const defaultRawBase = 'https://raw.githubusercontent.com/Diffmayn/PEPen-2.0/main/public/sample-xml';
+      const normalizeBase = (b) => String(b || '').replace(/\/+$/, '');
+      const sampleBaseCandidates = [normalizeBase(injectedBase), defaultRawBase].filter(Boolean);
+
       const fetchText = async (url) => {
         const res = await fetch(url, { cache: 'no-store' });
         if (!res.ok) throw new Error(`HTTP ${res.status} ved hentning af ${url}`);
         return await res.text();
       };
 
-      if (!iprText) iprText = await fetchText(withPublicBase('/sample-xml/PMR_A0626052_IPR.xml'));
-      if (!leafletText) leafletText = await fetchText(withPublicBase('/sample-xml/PMR_A0626052_Leaflet.xml'));
+      const fetchFirstOk = async (urls) => {
+        let lastErr = null;
+        for (const url of urls) {
+          if (!url) continue;
+          try {
+            return await fetchText(url);
+          } catch (e) {
+            lastErr = e;
+          }
+        }
+        throw lastErr || new Error('Kunne ikke hente demo XML');
+      };
+
+      if (!iprText) {
+        iprText = await fetchFirstOk([
+          withPublicBase('/sample-xml/PMR_A0626052_IPR.xml'),
+          ...sampleBaseCandidates.map((b) => `${b}/PMR_A0626052_IPR.xml`),
+        ]);
+      }
+      if (!leafletText) {
+        leafletText = await fetchFirstOk([
+          withPublicBase('/sample-xml/PMR_A0626052_Leaflet.xml'),
+          ...sampleBaseCandidates.map((b) => `${b}/PMR_A0626052_Leaflet.xml`),
+        ]);
+      }
 
       const iprFile = new File([iprText], 'PMR_A0626052_IPR.xml', { type: 'application/xml' });
       const leafletFile = new File([leafletText], 'PMR_A0626052_Leaflet.xml', { type: 'application/xml' });
