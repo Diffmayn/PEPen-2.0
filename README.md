@@ -47,6 +47,33 @@ The collaboration server listens on `http://localhost:4000` and expects the Reac
 
 The application will open in your browser at `http://localhost:3000`
 
+## 🌐 Streamlit Hosting (POC)
+
+This repo includes a Streamlit entrypoint that embeds the production React build as a single self-contained HTML file.
+
+### Generate the embedded app
+
+```bash
+npm install
+npm run build
+node scripts/generate_streamlit_embed.js
+```
+
+This creates `streamlit_embedded_app.html` (committed for Streamlit deployment).
+
+### Run locally
+
+```bash
+pip install -r requirements.txt
+streamlit run streamlit_app.py
+```
+
+### Deploy (Streamlit Community Cloud)
+
+- App file: `streamlit_app.py`
+- Python requirements: `requirements.txt`
+- Ensure `streamlit_embedded_app.html` is present in the repo
+
 ### Collaboration notes (prototype)
 
 - When collaboration is enabled, the app will prompt for a name (stored in localStorage).
