@@ -1,19 +1,23 @@
 import { XMLParser } from 'fast-xml-parser';
 
+/** XML Parser options optimized for the PMR XML format */
+const PARSER_OPTIONS = {
+  ignoreAttributes: false,
+  removeNSPrefix: true,  // Remove ns2: prefixes
+  parseTagValue: false,
+  parseAttributeValue: false,
+  trimValues: true,
+  isArray: () => false  // Don't force arrays
+};
+
 /**
  * Parse XML string to JSON
+ * @param {string} xmlString - The XML string to parse
+ * @returns {Promise<Object>} Parsed JSON object
+ * @throws {Error} If XML parsing fails
  */
 export const parseXML = async (xmlString) => {
-  const options = {
-    ignoreAttributes: false,
-    removeNSPrefix: true,  // Remove ns2: prefixes
-    parseTagValue: false,
-    parseAttributeValue: false,
-    trimValues: true,
-    isArray: () => false  // Don't force arrays
-  };
-  
-  const parser = new XMLParser(options);
+  const parser = new XMLParser(PARSER_OPTIONS);
   
   try {
     const result = parser.parse(xmlString);
@@ -24,6 +28,11 @@ export const parseXML = async (xmlString) => {
   }
 };
 
+/**
+ * Normalize a value to a trimmed string, handling nested objects and arrays
+ * @param {*} value - Value to normalize
+ * @returns {string} Normalized string
+ */
 const normalizeText = (value) => {
   if (value === null || value === undefined) return '';
 
@@ -42,6 +51,11 @@ const normalizeText = (value) => {
   return '';
 };
 
+/**
+ * Normalize a value to an array of non-empty strings
+ * @param {*} value - Value to normalize
+ * @returns {string[]} Array of non-empty strings
+ */
 const normalizeTextList = (value) => {
   if (value === null || value === undefined) return [];
   if (Array.isArray(value)) {

@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import PropTypes from 'prop-types';
 import {
   Drawer,
   Box,
@@ -245,3 +246,30 @@ export default function CommentsDrawer({
     </Drawer>
   );
 }
+
+CommentsDrawer.propTypes = {
+  open: PropTypes.bool,
+  onClose: PropTypes.func.isRequired,
+  offerTitle: PropTypes.string,
+  offerId: PropTypes.string,
+  pageIndex: PropTypes.number,
+  comments: PropTypes.arrayOf(PropTypes.shape({
+    id: PropTypes.string,
+    at: PropTypes.string,
+    text: PropTypes.string,
+    user: PropTypes.shape({
+      name: PropTypes.string,
+      email: PropTypes.string,
+    }),
+    mentions: PropTypes.arrayOf(PropTypes.string),
+  })),
+  onAddComment: PropTypes.func,
+  currentUserEmail: PropTypes.string,
+};
+
+CommentsDrawer.defaultProps = {
+  open: false,
+  comments: [],
+};
+
+export default CommentsDrawer;

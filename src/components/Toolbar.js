@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import PropTypes from 'prop-types';
 import { AppBar, Toolbar as MuiToolbar, IconButton, Button, Box, Menu, MenuItem, Typography, Tooltip, Switch, FormControlLabel, Select, Badge, Avatar, AvatarGroup, Autocomplete, TextField } from '@mui/material';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import SaveIcon from '@mui/icons-material/Save';

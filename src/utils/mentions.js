@@ -1,8 +1,14 @@
 import { getServerUrl } from './collab';
-import { isCompanyEmail as _isCompanyEmail, MOCK_EMAILS } from '../config/mockEmailDirectory';
+import { isCompanyEmail, MOCK_EMAILS, COMPANY_EMAIL_DOMAINS } from '../config/mockEmailDirectory';
 
-export const isCompanyEmail = _isCompanyEmail;
+// Re-export for convenience
+export { isCompanyEmail, COMPANY_EMAIL_DOMAINS };
 
+/**
+ * Normalize text for fuzzy search - strips diacritics and folds Danish chars
+ * @param {string} raw - Raw input text
+ * @returns {string} Normalized lowercase text
+ */
 export function normalizeForSearch(raw) {
   const s = String(raw || '').trim().toLowerCase();
   if (!s) return '';

@@ -1,8 +1,17 @@
-// Føtex Principles v11 (Nov 2025) — minimal, code-friendly model.
-// Note: the PDF describes silhouettes, not rigid templates.
+/**
+ * Føtex Principles v11 (Nov 2025) — minimal, code-friendly model.
+ * Note: the PDF describes silhouettes, not rigid templates.
+ * 
+ * @module utils/principles
+ */
 
+/** Textile purchasing group codes */
 const TEXTILE_PURCHASING_GROUPS = new Set(['800', '820', '860']);
 
+/**
+ * Valid variant letters for each principle group
+ * @type {Readonly<Record<string, string[]>>}
+ */
 export const PRINCIPLE_VARIANTS = Object.freeze({
   '1': ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'],
   '2': ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's'],
@@ -12,6 +21,10 @@ export const PRINCIPLE_VARIANTS = Object.freeze({
   '5': ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm'],
 });
 
+/**
+ * Get all principle options for dropdown selection
+ * @returns {Array<{id: string, label: string}>} Array of principle options
+ */
 export function listPrincipleOptions() {
   const out = [{ id: '', label: 'Auto (anbefalet)' }];
   for (const [group, variants] of Object.entries(PRINCIPLE_VARIANTS)) {
@@ -23,6 +36,11 @@ export function listPrincipleOptions() {
   return out;
 }
 
+/**
+ * Format a principle ID into a human-readable Danish label
+ * @param {string} id - Principle ID (e.g., "1a", "2b")
+ * @returns {string} Formatted label
+ */
 export function formatPrincipleLabel(id) {
   const v = String(id || '').trim();
   if (!v) return 'Auto (anbefalet)';
@@ -45,6 +63,11 @@ export function formatPrincipleLabel(id) {
   return `Princip #${group}${variant} · ${groupLabel}`;
 }
 
+/**
+ * Check if an offer belongs to a textile purchasing group
+ * @param {Object} offer - Offer object with purchasingGroup property
+ * @returns {boolean} True if textile offer
+ */
 export function isTextileOffer(offer) {
   const pg = String(offer?.purchasingGroup || '').trim();
   if (!pg) return false;
@@ -58,6 +81,14 @@ export function isTextilePage(area) {
   return offers.every(isTextileOffer);
 }
 
+/**
+ * Automatically determine the best principle for an area based on its characteristics
+ * @param {Object} params - Parameters object
+ * @param {Object} params.area - Area object with blocks
+ * @param {number} params.areaIndex - Zero-based area/page index
+ * @param {number} params.totalPages - Total number of pages
+ * @returns {string} Recommended principle ID or empty string
+ */
 export function getAutoPrincipleForArea({ area, areaIndex, totalPages }) {
   if (!area) return '';
 
@@ -75,6 +106,11 @@ export function getAutoPrincipleForArea({ area, areaIndex, totalPages }) {
   return '';
 }
 
+/**
+ * Parse a priority value from various formats to a number
+ * @param {*} v - Priority value (string, number, etc.)
+ * @returns {number} Parsed priority (lower = higher priority, 999 = default)
+ */
 function parsePriorityValue(v) {
   const s = String(v ?? '').trim();
   if (!s) return 999;
@@ -84,11 +120,27 @@ function parsePriorityValue(v) {
   return n;
 }
 
+/**
+ * Generate a stable key for a block based on its ID or index
+ * @param {Object} block - Block object
+ * @param {number} blockIndex - Block index in the array
+ * @returns {string} Stable key for the block
+ */
 function stableBlockKey(block, blockIndex) {
   const id = String(block?.blockId || '').trim();
   return id ? id : `idx-${blockIndex}`;
 }
 
+/**
+ * Validate if a principle selection is appropriate for the given context
+ * @param {Object} params - Parameters object
+ * @param {string} params.principleId - Selected principle ID
+ * @param {Object} params.area - Area object
+ * @param {number} params.areaIndex - Page index
+ * @param {number} params.totalPages - Total pages
+ * @param {string} params.viewMode - Current view mode
+ * @returns {string|null} Warning message or null if valid
+ */
 export function validatePrincipleSelection({ principleId, area, areaIndex, totalPages, viewMode }) {
   const id = String(principleId || '').trim();
   if (!id) return null;

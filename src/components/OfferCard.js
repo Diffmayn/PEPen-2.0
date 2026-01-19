@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import PropTypes from 'prop-types';
 import { Card, CardContent, CardMedia, Typography, Box, Chip, IconButton, TextField, Menu, MenuItem, Tooltip, Badge } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
@@ -520,5 +521,55 @@ function OfferCard({ offer, blockId, blockPriority, editMode, onClick, isSelecte
     </Card>
   );
 }
+
+OfferCard.propTypes = {
+  offer: PropTypes.shape({
+    id: PropTypes.string,
+    headline: PropTypes.string,
+    name: PropTypes.string,
+    bodyText: PropTypes.string,
+    price: PropTypes.string,
+    normalPrice: PropTypes.string,
+    salesText: PropTypes.string,
+    salesCondition: PropTypes.string,
+    buyQuantity: PropTypes.string,
+    salesPriceText: PropTypes.string,
+    logo: PropTypes.string,
+    purchasingGroup: PropTypes.string,
+    purchasingGroupDescription: PropTypes.string,
+    images: PropTypes.arrayOf(PropTypes.shape({
+      url: PropTypes.string,
+      publicId: PropTypes.string,
+    })),
+    products: PropTypes.arrayOf(PropTypes.shape({
+      productNumber: PropTypes.string,
+      description: PropTypes.string,
+      bodyText: PropTypes.string,
+    })),
+  }).isRequired,
+  blockId: PropTypes.string,
+  blockPriority: PropTypes.string,
+  editMode: PropTypes.bool,
+  onClick: PropTypes.func,
+  isSelected: PropTypes.bool,
+  areaIndex: PropTypes.number,
+  blockIndex: PropTypes.number,
+  onOfferUpdate: PropTypes.func,
+  highlightTerm: PropTypes.string,
+  proofingEnabled: PropTypes.bool,
+  proofing: PropTypes.object,
+  layoutSize: PropTypes.oneOf(['standard', 'half', 'full']),
+  onSetLayoutSize: PropTypes.func,
+  commentCount: PropTypes.number,
+  onOpenComments: PropTypes.func,
+};
+
+OfferCard.defaultProps = {
+  editMode: false,
+  isSelected: false,
+  proofingEnabled: false,
+  layoutSize: 'standard',
+  commentCount: 0,
+};
 
 export default OfferCard;

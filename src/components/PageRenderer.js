@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import PropTypes from 'prop-types';
 import { Paper, Box, Typography, Chip, Button, MenuItem, Select, Tooltip } from '@mui/material';
 import OfferCard from './OfferCard';
 import './PageRenderer.css';
@@ -379,5 +380,53 @@ function PageRenderer({ area, areaIndex, totalPages, viewMode, zoom, editMode, o
     </Paper>
   );
 }
+
+PageRenderer.propTypes = {
+  area: PropTypes.shape({
+    id: PropTypes.string,
+    name: PropTypes.string,
+    pageNumber: PropTypes.number,
+    templateId: PropTypes.string,
+    templateName: PropTypes.string,
+    blocks: PropTypes.arrayOf(PropTypes.shape({
+      blockId: PropTypes.string,
+      blockName: PropTypes.string,
+      priority: PropTypes.string,
+      offer: PropTypes.object,
+    })),
+  }),
+  areaIndex: PropTypes.number.isRequired,
+  totalPages: PropTypes.number.isRequired,
+  viewMode: PropTypes.oneOf(['single', 'spread', 'mobile', 'print']),
+  zoom: PropTypes.number,
+  editMode: PropTypes.bool,
+  onOfferClick: PropTypes.func,
+  selectedOfferId: PropTypes.string,
+  onOfferUpdate: PropTypes.func,
+  metadata: PropTypes.object,
+  highlightTerm: PropTypes.string,
+  highlightEnabled: PropTypes.bool,
+  mobile: PropTypes.bool,
+  layout: PropTypes.shape({
+    order: PropTypes.arrayOf(PropTypes.string),
+    sizes: PropTypes.object,
+    principle: PropTypes.object,
+  }),
+  onLayoutChange: PropTypes.func,
+  commentsByOfferId: PropTypes.object,
+  onOpenComments: PropTypes.func,
+  offerFilter: PropTypes.func,
+  proofingByOfferId: PropTypes.object,
+  proofingEnabled: PropTypes.bool,
+};
+
+PageRenderer.defaultProps = {
+  viewMode: 'single',
+  zoom: 100,
+  editMode: false,
+  highlightEnabled: false,
+  mobile: false,
+  proofingEnabled: false,
+};
 
 export default PageRenderer;

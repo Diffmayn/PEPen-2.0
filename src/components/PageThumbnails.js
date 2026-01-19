@@ -21,8 +21,10 @@ function PageThumbnails({ areas, currentPage, onPageSelect, thumbnails, onReques
     if (typeof onRequestThumbnail !== 'function') return;
     if (!('IntersectionObserver' in window)) return;
 
+    let isMounted = true;
     const obs = new IntersectionObserver(
       (entries) => {
+        if (!isMounted) return;
         for (const entry of entries) {
           if (!entry.isIntersecting) continue;
           const index = Number(entry.target.dataset.index);
@@ -38,7 +40,10 @@ function PageThumbnails({ areas, currentPage, onPageSelect, thumbnails, onReques
       if (el) obs.observe(el);
     });
 
-    return () => obs.disconnect();
+    return () => {
+      isMounted = false;
+      obs.disconnect();
+    };
   }, [areas.length, onRequestThumbnail, safeThumbs]);
 
   return (

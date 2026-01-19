@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import PropTypes from 'prop-types';
 import { Box, Paper, Typography } from '@mui/material';
 import HTMLFlipBook from 'react-pageflip';
 import html2canvas from 'html2canvas';
@@ -132,7 +133,14 @@ function LeafletViewer({ data, viewMode, currentPage, setCurrentPage, zoom, edit
   }, [findPageRendererEl, thumbnails]);
 
   useEffect(() => {
-    if (areas.length === 0) return;
+    if (areas.length === 0) {
+      // Clean up observer if no areas
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+        observerRef.current = null;
+      }
+      return;
+    }
     if (!mainViewerRef.current) return;
     if (flipEnabled) {
       if (observerRef.current) {
@@ -413,5 +421,44 @@ function LeafletViewer({ data, viewMode, currentPage, setCurrentPage, zoom, edit
     </div>
   );
 }
+
+LeafletViewer.propTypes = {
+  data: PropTypes.shape({
+    areas: PropTypes.array,
+    metadata: PropTypes.object,
+  }),
+  viewMode: PropTypes.oneOf(['single', 'spread', 'mobile', 'print']),
+  currentPage: PropTypes.number.isRequired,
+  setCurrentPage: PropTypes.func.isRequired,
+  zoom: PropTypes.number,
+  editMode: PropTypes.bool,
+  onOfferUpdate: PropTypes.func,
+  exportAllPagesSignal: PropTypes.number,
+  flipEnabled: PropTypes.bool,
+  isFullscreen: PropTypes.bool,
+  searchTerm: PropTypes.string,
+  highlightPageIndex: PropTypes.number,
+  technicalView: PropTypes.bool,
+  fileInfo: PropTypes.object,
+  layoutByAreaId: PropTypes.object,
+  onLayoutChange: PropTypes.func,
+  commentsByOfferId: PropTypes.object,
+  onOpenComments: PropTypes.func,
+  offerFilter: PropTypes.func,
+  focusedOfferId: PropTypes.string,
+  scrollToPageRequest: PropTypes.object,
+  proofingByOfferId: PropTypes.object,
+  proofingEnabled: PropTypes.bool,
+};
+
+LeafletViewer.defaultProps = {
+  viewMode: 'single',
+  zoom: 100,
+  editMode: false,
+  flipEnabled: false,
+  isFullscreen: false,
+  technicalView: false,
+  proofingEnabled: false,
+};
 
 export default LeafletViewer;

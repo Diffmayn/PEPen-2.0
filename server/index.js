@@ -1,6 +1,7 @@
 const express = require('express');
 const http = require('http');
 const cors = require('cors');
+const path = require('path');
 const { Server } = require('socket.io');
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 4000;
@@ -159,10 +160,46 @@ function getPresenceList(leafletId) {
 }
 
 const app = express();
-app.use(cors({ origin: CLIENT_ORIGIN, credentials: true }));
+
+// CORS configuration - allow multiple origins for development and production
+const ALLOWED_ORIGINS = [
+  CLIENT_ORIGIN,
+  'http://localhost:3000',
+  'http://localhost:4000',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:4000',
+].filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+    if (ALLOWED_ORIGINS.includes(origin)) {
+      return callback(null, true);
+    }
+    // In development, be permissive
+    if (process.env.NODE_ENV !== 'production') {
+      return callback(null, true);
+    }
+    callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
+
 app.use(express.json({ limit: '2mb' }));
+
+// Serve static files from the React app build folder
+const buildPath = path.join(__dirname, '..', 'build');
+app.use(express.static(buildPath, {
+  maxAge: process.env.NODE_ENV === 'production' ? '1d' : 0,
+  etag: true,
+}));
+
+// Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ ok: true, at: nowIso() });
+  res.json({ ok: true, at: nowIso(), uptime: process.uptime() });
 });
 
 app.get('/api/suggest-emails', async (req, res) => {
@@ -184,14 +221,40 @@ app.get('/api/suggest-emails', async (req, res) => {
   res.json({ ok: true, items });
 });
 
+// Catch-all handler to serve React app for client-side routing
+// This must be after all API routes
+app.get('*', (req, res, next) => {
+  // Don't serve index.html for API routes that weren't found
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ ok: false, error: 'Not found' });
+  }
+  res.sendFile(path.join(buildPath, 'index.html'), (err) => {
+    if (err) {
+      next(err);
+    }
+  });
+});
+
+// Error handling middleware
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, _next) => {
+  console.error('[PEPen server] Error:', err.message);
+  res.status(err.status || 500).json({
+    ok: false,
+    error: process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message,
+  });
+});
+
 const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: CLIENT_ORIGIN,
+    origin: ALLOWED_ORIGINS,
     methods: ['GET', 'POST'],
     credentials: true,
   },
+  pingTimeout: 60000,
+  pingInterval: 25000,
 });
 
 io.on('connection', (socket) => {

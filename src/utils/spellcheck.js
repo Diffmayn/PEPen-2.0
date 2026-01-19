@@ -2,8 +2,13 @@ import nspell from 'nspell';
 import daAffUrl from '../assets/dictionaries/da/da.aff';
 import daDicUrl from '../assets/dictionaries/da/da.dic';
 
+/** @type {Promise<nspell>|null} */
 let danishSpellcheckerPromise = null;
 
+/**
+ * Lazy-load the Danish spellchecker singleton
+ * @returns {Promise<nspell>} The spellchecker instance
+ */
 export function getDanishSpellchecker() {
   if (danishSpellcheckerPromise) return danishSpellcheckerPromise;
 
@@ -21,8 +26,15 @@ export function getDanishSpellchecker() {
   return danishSpellcheckerPromise;
 }
 
-const WORD_RE = /[\p{L}][\p{L}\p{M}'’-]*/gu;
+/** Unicode-aware word matching regex */
+const WORD_RE = /[\p{L}][\p{L}\p{M}''-]*/gu;
 
+/**
+ * Find misspelled words in text synchronously
+ * @param {nspell} spellchecker - The spellchecker instance
+ * @param {string} text - Text to check
+ * @returns {Array<{word: string, index: number, length: number}>} Array of misspellings
+ */
 export function findMisspellingsSync(spellchecker, text) {
   const value = String(text || '');
   const spell = spellchecker;
